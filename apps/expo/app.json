@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Triply",
+    "slug": "triply",
+    "plugins": ["expo-router"]
+  }
+}
+
+

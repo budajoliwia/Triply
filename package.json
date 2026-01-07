@@ -1,0 +1,15 @@
+{
+  "name": "triply",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "functions"
+  ],
+  "scripts": {
+    "expo": "npm --prefix apps/expo run start",
+    "web": "npm --prefix apps/expo run web",
+    "emulators": "firebase emulators:start",
+    "functions:build": "npm --prefix functions run build"
+  }
+}

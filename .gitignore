@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Env files (do not commit secrets)
+.env
+.env.*
+
+# Expo / React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Metro / Bundler
+.metro-health-check*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log
+firebase-debug.*.log
+
+# Functions build output
+functions/lib/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+
