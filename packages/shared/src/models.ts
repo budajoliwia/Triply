@@ -36,6 +36,7 @@ export type WithId<T> = T & { id: DocId };
 
 export interface UserDoc<TTimestamp = unknown> {
   email: string;
+  username: string;
   role: UserRole;
 
   /** Default: 5 */
