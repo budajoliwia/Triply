@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, TextInput, Button, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { Link } from 'expo-router';
 import { auth, db } from '../src/firebase/client';
 import { UserDoc, ISODateString } from '@triply/shared';
@@ -9,17 +9,49 @@ import { UserDoc, ISODateString } from '@triply/shared';
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password || !username) {
-      Alert.alert('Error', 'Please enter email, password, and username');
+    if (!email || !password || !username || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      Alert.alert('Error', 'Invalid email address');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (email === username) {
+      Alert.alert('Error', 'Email and username cannot be the same');
       return;
     }
 
     setLoading(true);
     try {
+      // Check for unique username
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('username', '==', username));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        Alert.alert('Error', 'Username already taken');
+        setLoading(false);
+        return;
+      }
+
       // 1. Create Auth User
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -76,6 +108,14 @@ export default function RegisterScreen() {
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
+        secureTextEntry
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Confirm Password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
         secureTextEntry
       />
 
