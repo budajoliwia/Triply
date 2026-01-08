@@ -29,6 +29,7 @@
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {
-    "expo-constants": "^18.0.13"
+    "expo-constants": "^18.0.13",
+    "expo-image-manipulator": "^14.0.8"
   }
 }
