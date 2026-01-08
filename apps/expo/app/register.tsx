@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { View, TextInput, Button, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
 import { Link } from 'expo-router';
 import { auth, db } from '../src/firebase/client';
 import { UserDoc, ISODateString } from '@triply/shared';

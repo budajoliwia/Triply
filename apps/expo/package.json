@@ -11,10 +11,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@triply/shared": "*",
     "expo": "^54.0.0",
+    "expo-image-picker": "~17.0.10",
     "expo-router": "~6.0.0",
     "firebase": "^10.0.0",
-    "@triply/shared": "*",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.0",
