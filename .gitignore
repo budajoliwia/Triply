@@ -31,4 +31,7 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Safety backups (should never be committed)
+.git.bak-*/
+
 
