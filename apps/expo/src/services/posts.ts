@@ -65,7 +65,7 @@ export async function createPost({ userId, text, imageUri }: CreatePostParams): 
     const newPostRef = doc(postsRef);
     const postId = newPostRef.id;
 
-    let photoPath: string | undefined = undefined;
+    let photoPath: string | null = null;
 
     if (imageUri) {
       photoPath = await uploadPostImage(userId, postId, imageUri);
@@ -131,6 +131,48 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
     return posts;
   } catch (error) {
     console.error('Error fetching posts:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch all posts for a specific user (including pending).
+ */
+export async function getUserPosts(userId: string): Promise<Post[]> {
+  try {
+    const q = query(
+      collection(db, POSTS_COLLECTION),
+      where('authorId', '==', userId),
+      orderBy('createdAt', 'desc'),
+    );
+
+    const querySnapshot = await getDocs(q);
+
+    const posts: Post[] = await Promise.all(
+      querySnapshot.docs.map(async (doc) => {
+        const data = doc.data() as PostDoc<Timestamp>;
+        let photoUrl = undefined;
+
+        if (data.photo?.displayPath) {
+          try {
+            const photoRef = ref(storage, data.photo.displayPath);
+            photoUrl = await getDownloadURL(photoRef);
+          } catch (e) {
+            console.warn('Error fetching photo URL:', e);
+          }
+        }
+
+        return {
+          id: doc.id,
+          ...data,
+          photoUrl,
+        };
+      }),
+    );
+
+    return posts;
+  } catch (error) {
+    console.error('Error fetching user posts:', error);
     return [];
   }
 }

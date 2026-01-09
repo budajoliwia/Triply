@@ -53,9 +53,9 @@ export interface UserDoc<TTimestamp = unknown> {
 
 export interface PostPhoto {
   /** Storage path, e.g. "posts/original/..." */
-  originalPath?: string;
+  originalPath?: string | null;
   /** Storage path for compressed / display-ready image */
-  displayPath?: string;
+  displayPath?: string | null;
 }
 
 export interface PostDoc<TTimestamp = unknown> {

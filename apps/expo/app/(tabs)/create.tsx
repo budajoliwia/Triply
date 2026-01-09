@@ -23,6 +23,7 @@ export default function CreateScreen() {
   const [content, setContent] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const pickImage = async () => {
     try {
@@ -67,23 +68,31 @@ export default function CreateScreen() {
         text: content,
         imageUri: image,
       });
-      Alert.alert('Sukces', 'Twój post oczekuje na zatwierdzenie przez administratora.', [
-        {
-          text: 'OK',
-          onPress: () => {
-            setContent('');
-            setImage(null);
-            router.push('/(tabs)/feed');
-          },
-        },
-      ]);
+      setSuccess(true);
+      setTimeout(() => {
+        setContent('');
+        setImage(null);
+        setSuccess(false);
+        router.push('/(tabs)/feed');
+      }, 1500);
     } catch (error) {
       console.error(error);
       Alert.alert('Błąd', 'Nie udało się dodać posta.');
-    } finally {
       setLoading(false);
+    } finally {
+      if (!success) setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]}>
+        <Ionicons name="checkmark-circle" size={80} color="#4CD964" />
+        <Text style={styles.successText}>Post przesłany do moderacji!</Text>
+        <Text style={styles.redirectText}>Przekierowanie...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -216,5 +225,19 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: '#007AFF',
     fontWeight: '500',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  redirectText: {
+    fontSize: 16,
+    color: '#666',
   },
 });

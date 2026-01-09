@@ -1,7 +1,20 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Skeleton rules (fill in later)
+    
+    // Helper function
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Allow access to user post images
+    // Path used in app: posts/display/{userId}/{postId}.jpg
+    match /posts/display/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Default block all
     match /{allPaths=**} {
       allow read, write: if false;
     }
