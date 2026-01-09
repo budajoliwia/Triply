@@ -19,7 +19,7 @@ function RootLayoutNav() {
       router.replace('/login');
     } else if (user && inAuthRoute) {
       // Redirect to home if authenticated and on login/register page
-      router.replace('/');
+      router.replace('/(tabs)/feed');
     }
   }, [user, isLoading, segments, router]);
 

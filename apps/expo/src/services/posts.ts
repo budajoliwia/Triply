@@ -28,6 +28,7 @@ export interface CreatePostParams {
 export interface Post extends PostDoc<Timestamp> {
   id: string;
   photoUrl?: string; // resolved download URL for display
+  authorName?: string;
 }
 
 export interface Comment {
@@ -93,8 +94,25 @@ export async function createPost({ userId, text, imageUri }: CreatePostParams): 
 }
 
 /**
+ * Helper to fetch user profile data (username)
+ */
+async function getUserProfile(userId: string): Promise<{ username: string } | null> {
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      return userSnap.data() as { username: string };
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Error fetching user profile for ${userId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Fetch posts by status.
- * Resolves storage paths to download URLs.
+ * Resolves storage paths to download URLs and fetches author names.
  */
 export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]> {
   try {
@@ -106,11 +124,16 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
 
     const querySnapshot = await getDocs(q);
 
+    // Cache for user profiles to avoid repeated fetches in the same list
+    const userCache: Record<string, string> = {};
+
     const posts: Post[] = await Promise.all(
       querySnapshot.docs.map(async (doc) => {
         const data = doc.data() as PostDoc<Timestamp>;
         let photoUrl = undefined;
+        let authorName = 'Użytkownik';
 
+        // 1. Resolve Photo URL
         if (data.photo?.displayPath) {
           try {
             const photoRef = ref(storage, data.photo.displayPath);
@@ -120,10 +143,24 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
           }
         }
 
+        // 2. Resolve Author Name
+        if (data.authorId) {
+          if (userCache[data.authorId]) {
+            authorName = userCache[data.authorId];
+          } else {
+            const profile = await getUserProfile(data.authorId);
+            if (profile?.username) {
+              authorName = profile.username;
+              userCache[data.authorId] = authorName;
+            }
+          }
+        }
+
         return {
           id: doc.id,
           ...data,
           photoUrl,
+          authorName,
         };
       }),
     );
