@@ -19,31 +19,7 @@ service cloud.firestore {
 
     // --- Users Collection ---
     match /users/{userId} {
-      // Allow read if user is authenticated and (is own profile OR is admin)
-      // Exception: allow checking username uniqueness (this is tricky with just rules, 
-      // usually requires a dedicated collection or "list" rule that allows reading if certain field matches)
-      // For now, let's allow "list" on users if they are querying for username check?
-      // Actually, standard pattern for public profile:
-      // Allow read if isAuthenticated() (or even public if profiles are public).
-      // Given the registration check `where('username', '==', username)`, we need to allow listing users for that query.
-      
-      // Let's allow public read for now to fix the specific error, or restrict to auth if possible.
-      // Since registration happens BEFORE auth (mostly), or right after creating auth user...
-      // In register.tsx: createUserWithEmailAndPassword happens AFTER the username check.
-      // So the user is NOT authenticated when checking username uniqueness!
-      // This implies we need public read on users collection OR at least "list" permission with username filter.
-      
-      allow read: if true; // Temporary: Open for username check. Ideally restrict to `request.query.limit <= 1` etc.
-      
-      // Or safer:
-      // allow list: if request.query.limit <= 1; 
-      // allow get: if true;
-      
-      // But for the sake of the user request "fix the error":
-      // The user mentioned "false for 'list' @ L50", meaning it hit the default deny.
-      // Providing a match block for /users/{userId} will handle it.
-      
-      // Write: Only the user can write their own document (or admin)
+      allow read: if true; 
       allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
@@ -67,6 +43,7 @@ service cloud.firestore {
                         && !(request.resource.data.status in ['approved', 'rejected'])
                         // Prevent changing system fields
                         && request.resource.data.authorId == resource.data.authorId
+                        // CRITICAL: Prevent client from changing counters directly
                         && request.resource.data.likeCount == resource.data.likeCount
                         && request.resource.data.commentCount == resource.data.commentCount
                        );
@@ -74,9 +51,28 @@ service cloud.firestore {
       // DELETE
       allow delete: if isAdmin() 
                     || (isAuthenticated() && isAuthor(resource) && resource.data.status == 'draft');
+
+      // --- Likes Subcollection ---
+      // posts/{postId}/likes/{userId}
+      match /likes/{userId} {
+        allow read: if isAuthenticated();
+        // Create: Only allow if document ID matches authenticated User ID
+        allow create: if isAuthenticated() && request.auth.uid == userId;
+        // Delete: Only allow if document ID matches authenticated User ID
+        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      }
+
+      // --- Comments Subcollection ---
+      // posts/{postId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        // Create: Allow any authenticated user to comment
+        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+        // Delete: Allow author or admin to delete
+        allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+      }
     }
     
-    // Default deny for other collections for now, or match existing skeleton
     match /{document=**} {
       allow read, write: if false;
     }

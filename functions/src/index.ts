@@ -1,3 +1,5 @@
-// Intentionally minimal skeleton.
-// Add exports (triggers/callables) when you start implementing Functions.
-export {};
+import { initializeApp } from "firebase-admin/app";
+
+initializeApp();
+
+export * from "./triggers/postInteractions";

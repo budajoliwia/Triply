@@ -7,6 +7,9 @@ import {
   where,
   orderBy,
   getDocs,
+  deleteDoc,
+  getDoc,
+  addDoc,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -25,6 +28,13 @@ export interface CreatePostParams {
 export interface Post extends PostDoc<Timestamp> {
   id: string;
   photoUrl?: string; // resolved download URL for display
+}
+
+export interface Comment {
+  id: string;
+  authorId: string;
+  text: string;
+  createdAt: Timestamp;
 }
 
 /**
@@ -153,6 +163,62 @@ export async function rejectPost(postId: string): Promise<void> {
     });
   } catch (error) {
     console.error('Error rejecting post:', error);
+    throw error;
+  }
+}
+
+/**
+ * Toggles a like for a post.
+ * Returns true if liked, false if unliked.
+ */
+export async function toggleLike(postId: string, userId: string): Promise<boolean> {
+  const likeRef = doc(db, POSTS_COLLECTION, postId, 'likes', userId);
+  try {
+    const likeSnap = await getDoc(likeRef);
+    if (likeSnap.exists()) {
+      await deleteDoc(likeRef);
+      return false;
+    } else {
+      await setDoc(likeRef, { createdAt: serverTimestamp() });
+      return true;
+    }
+  } catch (error) {
+    console.error('Error toggling like:', error);
+    throw error;
+  }
+}
+
+/**
+ * Adds a comment to a post.
+ */
+export async function addComment(postId: string, userId: string, text: string): Promise<void> {
+  const commentsRef = collection(db, POSTS_COLLECTION, postId, 'comments');
+  try {
+    await addDoc(commentsRef, {
+      authorId: userId,
+      text,
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    throw error;
+  }
+}
+
+/**
+ * Gets comments for a post.
+ */
+export async function getComments(postId: string): Promise<Comment[]> {
+  const commentsRef = collection(db, POSTS_COLLECTION, postId, 'comments');
+  const q = query(commentsRef, orderBy('createdAt', 'asc'));
+  try {
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Comment[];
+  } catch (error) {
+    console.error('Error fetching comments:', error);
     throw error;
   }
 }
