@@ -71,11 +71,14 @@ export default function RegisterScreen() {
       const newUserDoc: UserDoc = {
         email: user.email!,
         username: username,
+        usernameLower: username.toLowerCase(),
         role: 'user',
         dailyPostLimit: 5,
         usedToday: 0,
         lastUsageDate: todayString,
         createdAt: serverTimestamp(),
+        followersCount: 0,
+        followingCount: 0,
       };
 
       await setDoc(doc(db, 'users', user.uid), newUserDoc);

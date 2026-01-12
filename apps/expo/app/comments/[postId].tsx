@@ -91,7 +91,9 @@ export default function CommentsScreen() {
     return (
       <View style={styles.commentContainer}>
         <View style={styles.commentHeader}>
-          <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
+          <TouchableOpacity onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}>
+            <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
+          </TouchableOpacity>
           <Text style={styles.timestamp}>
             {item.createdAt?.seconds
               ? new Date(item.createdAt.seconds * 1000).toLocaleDateString()

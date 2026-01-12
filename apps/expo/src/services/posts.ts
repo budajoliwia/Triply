@@ -13,10 +13,12 @@ import {
   serverTimestamp,
   Timestamp,
   runTransaction,
+  documentId,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/client';
 import { PostDoc, PostStatus } from '@triply/shared/src/models';
+import { getUserProfile } from './users';
 
 const POSTS_COLLECTION = 'posts';
 const POST_NOT_FOUND_CODE = 'post/not-found';
@@ -102,23 +104,6 @@ export async function createPost({ userId, text, imageUri }: CreatePostParams): 
   }
 }
 
-/**
- * Helper to fetch user profile data (username)
- */
-async function getUserProfile(userId: string): Promise<{ username: string } | null> {
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    const userSnap = await getDoc(userDocRef);
-    if (userSnap.exists()) {
-      return userSnap.data() as { username: string };
-    }
-    return null;
-  } catch (error) {
-    console.warn(`Error fetching user profile for ${userId}:`, error);
-    return null;
-  }
-}
-
 function timestampToMillis(value: unknown): number | null {
   if (!value) return null;
   if (typeof value === 'object' && value !== null) {
@@ -154,8 +139,50 @@ function sortPostsNewestFirst(a: PostDoc<unknown>, b: PostDoc<unknown>): number 
 }
 
 /**
+ * Helper to process post documents (resolve URLs and author names)
+ */
+async function processPostDocs(docs: any[]): Promise<Post[]> {
+  const userCache: Record<string, string> = {};
+
+  return Promise.all(
+    docs.map(async (docSnap) => {
+      const data = docSnap.data() as PostDoc<Timestamp>;
+      let photoUrl = undefined;
+      let authorName = 'Użytkownik';
+
+      if (data.photo?.displayPath) {
+        try {
+          const photoRef = ref(storage, data.photo.displayPath);
+          photoUrl = await getDownloadURL(photoRef);
+        } catch (e) {
+          console.warn('Error fetching photo URL:', e);
+        }
+      }
+
+      if (data.authorId) {
+        if (userCache[data.authorId]) {
+          authorName = userCache[data.authorId];
+        } else {
+          const profile = await getUserProfile(data.authorId);
+          if (profile?.username) {
+            authorName = profile.username;
+            userCache[data.authorId] = authorName;
+          }
+        }
+      }
+
+      return {
+        id: docSnap.id,
+        ...data,
+        photoUrl,
+        authorName,
+      };
+    })
+  );
+}
+
+/**
  * Fetch posts by status.
- * Resolves storage paths to download URLs and fetches author names.
  */
 export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]> {
   try {
@@ -165,47 +192,7 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
     );
 
     const querySnapshot = await getDocs(q);
-
-    // Cache for user profiles to avoid repeated fetches in the same list
-    const userCache: Record<string, string> = {};
-
-    const unsortedPosts: Post[] = await Promise.all(
-      querySnapshot.docs.map(async (doc) => {
-        const data = doc.data() as PostDoc<Timestamp>;
-        let photoUrl = undefined;
-        let authorName = 'Użytkownik';
-
-        // 1. Resolve Photo URL
-        if (data.photo?.displayPath) {
-          try {
-            const photoRef = ref(storage, data.photo.displayPath);
-            photoUrl = await getDownloadURL(photoRef);
-          } catch (e) {
-            console.warn('Error fetching photo URL:', e);
-          }
-        }
-
-        // 2. Resolve Author Name
-        if (data.authorId) {
-          if (userCache[data.authorId]) {
-            authorName = userCache[data.authorId];
-          } else {
-            const profile = await getUserProfile(data.authorId);
-            if (profile?.username) {
-              authorName = profile.username;
-              userCache[data.authorId] = authorName;
-            }
-          }
-        }
-
-        return {
-          id: doc.id,
-          ...data,
-          photoUrl,
-          authorName,
-        };
-      }),
-    );
+    const unsortedPosts = await processPostDocs(querySnapshot.docs);
 
     return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
   } catch (error) {
@@ -215,60 +202,60 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
 }
 
 /**
- * Fetch all posts for a specific user (including pending).
+ * Fetch all posts for a specific user (including pending), optionally filtered by status.
  */
-export async function getUserPosts(userId: string): Promise<Post[]> {
+export async function getUserPosts(userId: string, status?: PostStatus): Promise<Post[]> {
   try {
-    // IMPORTANT: do NOT depend on orderBy('createdAt') here.
-    // If some documents are missing createdAt / have inconsistent types,
-    // orderBy can lead to unexpected results or require extra indexes.
-    // We fetch everything for the author and sort client-side with fallbacks.
-    const q = query(collection(db, POSTS_COLLECTION), where('authorId', '==', userId));
+    let q;
+    if (status) {
+      q = query(
+        collection(db, POSTS_COLLECTION),
+        where('authorId', '==', userId),
+        where('status', '==', status)
+      );
+    } else {
+      q = query(collection(db, POSTS_COLLECTION), where('authorId', '==', userId));
+    }
 
     const querySnapshot = await getDocs(q);
-
-    // Cache username fetch (optional but cheap and keeps UI consistent)
-    const userCache: Record<string, string> = {};
-
-    const unsortedPosts: Post[] = await Promise.all(
-      querySnapshot.docs.map(async (doc) => {
-        const data = doc.data() as PostDoc<Timestamp>;
-        let photoUrl = undefined;
-        let authorName = 'Użytkownik';
-
-        if (data.photo?.displayPath) {
-          try {
-            const photoRef = ref(storage, data.photo.displayPath);
-            photoUrl = await getDownloadURL(photoRef);
-          } catch (e) {
-            console.warn('Error fetching photo URL:', e);
-          }
-        }
-
-        if (data.authorId) {
-          if (userCache[data.authorId]) {
-            authorName = userCache[data.authorId];
-          } else {
-            const profile = await getUserProfile(data.authorId);
-            if (profile?.username) {
-              authorName = profile.username;
-              userCache[data.authorId] = authorName;
-            }
-          }
-        }
-
-        return {
-          id: doc.id,
-          ...data,
-          photoUrl,
-          authorName,
-        };
-      }),
-    );
+    const unsortedPosts = await processPostDocs(querySnapshot.docs);
 
     return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
   } catch (error) {
     console.error('Error fetching user posts:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch posts for a list of author IDs (chunked to handle Firestore 'in' limit of 10).
+ * Always filters by status='approved'.
+ */
+export async function getPostsByAuthors(authorIds: string[]): Promise<Post[]> {
+  if (authorIds.length === 0) return [];
+
+  const chunks = [];
+  for (let i = 0; i < authorIds.length; i += 10) {
+    chunks.push(authorIds.slice(i, i + 10));
+  }
+
+  try {
+    const allDocs = [];
+    
+    for (const chunk of chunks) {
+      const q = query(
+        collection(db, POSTS_COLLECTION),
+        where('status', '==', 'approved'),
+        where('authorId', 'in', chunk)
+      );
+      const snapshot = await getDocs(q);
+      allDocs.push(...snapshot.docs);
+    }
+
+    const unsortedPosts = await processPostDocs(allDocs);
+    return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
+  } catch (error) {
+    console.error('Error fetching posts by authors:', error);
     return [];
   }
 }
@@ -406,7 +393,6 @@ export async function getComments(postId: string): Promise<Comment[]> {
   try {
     const snapshot = await getDocs(q);
     
-    // Cache for usernames
     const userCache: Record<string, string> = {};
 
     const comments = await Promise.all(

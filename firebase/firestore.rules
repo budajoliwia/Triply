@@ -16,6 +16,16 @@ service cloud.firestore {
       // Safe read (admin role check)
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+
+    function userCountersUnchanged() {
+      // Block any client-side updates to counters.
+      // For older docs, treat missing counters as 0.
+      let currentFollowers = resource.data.get('followersCount', 0);
+      let currentFollowing = resource.data.get('followingCount', 0);
+      let nextFollowers = request.resource.data.get('followersCount', currentFollowers);
+      let nextFollowing = request.resource.data.get('followingCount', currentFollowing);
+      return nextFollowers == currentFollowers && nextFollowing == currentFollowing;
+    }
     
     // Allow ONLY commentCount +/- 1 (and updatedAt change) while all other fields stay identical.
     function isCommentCountUpdate(resource, requestResource) {
@@ -38,7 +48,33 @@ service cloud.firestore {
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if true; 
-      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Create user doc (registration)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      // Allow updates, but never allow clients to update follow counters directly.
+      allow update: if isAuthenticated()
+                    && (request.auth.uid == userId || isAdmin())
+                    && userCountersUnchanged();
+      allow delete: if isAuthenticated() && isAdmin();
+
+      // --- Following Subcollection ---
+      // users/{userId}/following/{targetUid}
+      match /following/{targetUid} {
+        // Anyone can read who someone follows? Let's say yes for now, or just authenticated.
+        allow read: if isAuthenticated();
+        // Only the user themselves can add/remove people they follow
+        allow create, delete: if isAuthenticated() && request.auth.uid == userId;
+        allow update: if false;
+      }
+
+      // --- Followers Subcollection ---
+      // users/{userId}/followers/{followerUid}
+      match /followers/{followerUid} {
+        allow read: if isAuthenticated();
+        // Only allow the follower to create/delete their own follower edge.
+        // Path: users/{targetUid}/followers/{request.auth.uid}
+        allow create, delete: if isAuthenticated() && request.auth.uid == followerUid;
+        allow update: if false;
+      }
     }
 
     // --- Posts Collection ---

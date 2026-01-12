@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../src/context/auth';
 import { auth, db } from '../../src/firebase/client';
 import { getUserPosts, Post } from '../../src/services/posts';
@@ -32,6 +32,7 @@ export default function MyProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [postFilter, setPostFilter] = useState<ProfilePostFilter>('approved');
 
   const fetchUserPosts = useCallback(async () => {
@@ -63,28 +64,36 @@ export default function MyProfileScreen() {
     }, [fetchUserPosts]),
   );
 
+  // Firestore is the source of truth for profile + counters (survives refresh/navigation)
   useEffect(() => {
-    const fetchUsername = async () => {
-      if (!user) {
-        setUsername(null);
-        return;
-      }
-      try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(userDocRef);
-        if (snap.exists()) {
-          const data = snap.data() as UserDoc;
-          setUsername(typeof data.username === 'string' ? data.username : null);
-        } else {
-          setUsername(null);
-        }
-      } catch (error) {
-        console.error('Error fetching username:', error);
-        setUsername(null);
-      }
-    };
+    if (!user) {
+      setUsername(null);
+      setStats({ followers: 0, following: 0 });
+      return;
+    }
 
-    fetchUsername();
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (snap) => {
+        if (!snap.exists()) {
+          setUsername(null);
+          setStats({ followers: 0, following: 0 });
+          return;
+        }
+        const data = snap.data() as UserDoc;
+        setUsername(typeof data.username === 'string' ? data.username : null);
+        setStats({
+          followers: typeof data.followersCount === 'number' ? data.followersCount : 0,
+          following: typeof data.followingCount === 'number' ? data.followingCount : 0,
+        });
+      },
+      (error) => {
+        console.error('Error subscribing to user doc:', error);
+      },
+    );
+
+    return unsubscribe;
   }, [user]);
 
   const onRefresh = () => {
@@ -181,16 +190,16 @@ export default function MyProfileScreen() {
 
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{posts.length}</Text>
-          <Text style={styles.statLabel}>Posty</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>240</Text>
+          <Text style={styles.statValue}>{stats.followers}</Text>
           <Text style={styles.statLabel}>Obserwujący</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>180</Text>
-          <Text style={styles.statLabel}>Obserwowani</Text>
+          <Text style={styles.statValue}>{stats.following}</Text>
+          <Text style={styles.statLabel}>Obserwuje</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{posts.length}</Text>
+          <Text style={styles.statLabel}>Posty</Text>
         </View>
       </View>
     </View>

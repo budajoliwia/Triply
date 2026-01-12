@@ -12,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   addComment,
@@ -21,7 +22,9 @@ import {
   getPosts,
   Post,
   toggleLike,
+  getPostsByAuthors,
 } from '../../src/services/posts';
+import { getFollowingIds } from '../../src/services/users';
 import { useAuth } from '../../src/context/auth';
 
 export default function FeedScreen() {
@@ -29,6 +32,8 @@ export default function FeedScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [feedType, setFeedType] = useState<'all' | 'following'>('all');
+  
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [expandedComments, setExpandedComments] = useState<Comment[]>([]);
   const [expandedCommentsLoading, setExpandedCommentsLoading] = useState(false);
@@ -37,8 +42,22 @@ export default function FeedScreen() {
 
   const fetchPosts = async () => {
     try {
-      const approvedPosts = await getPosts('approved');
-      setPosts(approvedPosts);
+      if (feedType === 'all') {
+        const approvedPosts = await getPosts('approved');
+        setPosts(approvedPosts);
+      } else {
+        if (!user) {
+          setPosts([]);
+        } else {
+          const followingIds = await getFollowingIds(user.uid);
+          if (followingIds.length === 0) {
+            setPosts([]);
+          } else {
+            const followingPosts = await getPostsByAuthors(followingIds);
+            setPosts(followingPosts);
+          }
+        }
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -48,8 +67,9 @@ export default function FeedScreen() {
   };
 
   useEffect(() => {
+    setLoading(true);
     fetchPosts();
-  }, []);
+  }, [feedType, user]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -166,7 +186,11 @@ export default function FeedScreen() {
 
     return (
       <View style={styles.postContainer}>
-        <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.header}
+          onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}
+          disabled={!item.authorId}
+        >
           <View style={styles.avatarPlaceholder} />
           <View>
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
@@ -176,7 +200,7 @@ export default function FeedScreen() {
                 : 'Teraz'}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <Text style={styles.content}>{item.text}</Text>
 
@@ -211,7 +235,9 @@ export default function FeedScreen() {
                   return (
                     <View key={c.id} style={styles.commentRow}>
                       <View style={styles.commentHeaderRow}>
-                        <Text style={styles.commentAuthor}>{c.authorName || 'Użytkownik'}</Text>
+                        <TouchableOpacity onPress={() => c.authorId && router.push(`/profile/${c.authorId}`)}>
+                          <Text style={styles.commentAuthor}>{c.authorName || 'Użytkownik'}</Text>
+                        </TouchableOpacity>
                         {canDelete && (
                           <TouchableOpacity onPress={() => handleDeleteComment(item, c.id)}>
                             <Text style={styles.commentDelete}>Usuń</Text>
@@ -259,6 +285,30 @@ export default function FeedScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.appTitle}>Triply</Text>
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            onPress={() => setFeedType('all')}
+            style={[styles.toggleButton, feedType === 'all' && styles.toggleButtonActive]}
+          >
+            <Text style={[styles.toggleText, feedType === 'all' && styles.toggleTextActive]}>
+              Wszystkie
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!user) {
+                Alert.alert('Zaloguj się', 'Musisz być zalogowany, aby zobaczyć obserwowane.');
+                return;
+              }
+              setFeedType('following');
+            }}
+            style={[styles.toggleButton, feedType === 'following' && styles.toggleButtonActive]}
+          >
+            <Text style={[styles.toggleText, feedType === 'following' && styles.toggleTextActive]}>
+              Obserwowane
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -273,7 +323,11 @@ export default function FeedScreen() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Brak postów. Bądź pierwszy!</Text>
+              <Text style={styles.emptyText}>
+                {feedType === 'following'
+                  ? 'Nie obserwujesz nikogo lub obserwowani nie dodali postów.'
+                  : 'Brak postów. Bądź pierwszy!'}
+              </Text>
             </View>
           }
         />
@@ -290,6 +344,7 @@ const styles = StyleSheet.create({
   topBar: {
     backgroundColor: '#fff',
     padding: 15,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     alignItems: 'center',
@@ -298,6 +353,35 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#007AFF',
+    marginBottom: 10,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    padding: 2,
+  },
+  toggleButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 15,
+    borderRadius: 18,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  toggleText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  toggleTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
   loader: {
     marginTop: 20,

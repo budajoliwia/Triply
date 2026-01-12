@@ -37,6 +37,7 @@ export type WithId<T> = T & { id: DocId };
 export interface UserDoc<TTimestamp = unknown> {
   email: string;
   username: string;
+  usernameLower: string;
   role: UserRole;
 
   /** Default: 5 */
@@ -47,6 +48,9 @@ export interface UserDoc<TTimestamp = unknown> {
 
   /** Local date string used for daily limit reset */
   lastUsageDate: ISODateString;
+
+  followersCount: number;
+  followingCount: number;
 
   createdAt: TTimestamp;
 }
