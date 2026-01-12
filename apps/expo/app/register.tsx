@@ -23,27 +23,27 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!email || !password || !username || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Błąd', 'Proszę wypełnić wszystkie pola');
       return;
     }
 
     if (!email.includes('@')) {
-      Alert.alert('Error', 'Invalid email address');
+      Alert.alert('Błąd', 'Nieprawidłowy adres email');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert('Błąd', 'Hasło musi mieć co najmniej 6 znaków');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Błąd', 'Hasła nie są identyczne');
       return;
     }
 
     if (email === username) {
-      Alert.alert('Error', 'Email and username cannot be the same');
+      Alert.alert('Błąd', 'Email i nazwa użytkownika nie mogą być takie same');
       return;
     }
 
@@ -55,7 +55,7 @@ export default function RegisterScreen() {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        Alert.alert('Error', 'Username already taken');
+        Alert.alert('Błąd', 'Nazwa użytkownika jest już zajęta');
         setLoading(false);
         return;
       }
@@ -83,8 +83,22 @@ export default function RegisterScreen() {
       // Auth listener in _layout will handle redirect
     } catch (error: unknown) {
       console.error(error);
-      const errorMessage = (error as { message?: string }).message || 'An error occurred';
-      Alert.alert('Registration Failed', errorMessage);
+      const code = (error as { code?: string }).code;
+      let errorMessage = 'Wystąpił błąd podczas rejestracji';
+
+      if (code === 'auth/email-already-in-use') {
+        errorMessage = 'Ten adres email jest już zarejestrowany.';
+      } else if (code === 'auth/invalid-email') {
+        errorMessage = 'Nieprawidłowy format adresu email.';
+      } else if (code === 'auth/weak-password') {
+        errorMessage = 'Hasło jest zbyt słabe.';
+      } else if (code === 'auth/network-request-failed') {
+        errorMessage = 'Błąd sieci. Sprawdź połączenie z internetem.';
+      } else if ((error as { message?: string }).message) {
+        errorMessage = (error as { message?: string }).message!;
+      }
+
+      Alert.alert('Rejestracja nieudana', errorMessage);
     } finally {
       setLoading(false);
     }

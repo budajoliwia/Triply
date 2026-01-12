@@ -16,6 +16,24 @@ service cloud.firestore {
       // Safe read (admin role check)
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+    
+    // Allow ONLY commentCount +/- 1 (and updatedAt change) while all other fields stay identical.
+    function isCommentCountUpdate(resource, requestResource) {
+      let currentCount = resource.data.get('commentCount', 0);
+      
+      return requestResource.data.authorId == resource.data.authorId
+             && requestResource.data.text == resource.data.text
+             && requestResource.data.tags == resource.data.tags
+             && requestResource.data.photo == resource.data.photo
+             && requestResource.data.status == resource.data.status
+             && requestResource.data.likeCount == resource.data.get('likeCount', 0)
+             && requestResource.data.createdAt == resource.data.createdAt
+             && (
+               requestResource.data.commentCount == currentCount + 1 ||
+               requestResource.data.commentCount == currentCount - 1
+             );
+      // updatedAt may differ; we intentionally do NOT compare it here.
+    }
 
     // --- Users Collection ---
     match /users/{userId} {
@@ -38,15 +56,27 @@ service cloud.firestore {
 
       // UPDATE
       allow update: if isAdmin() 
-                    || (isAuthenticated() && isAuthor(resource) 
-                        // Prevent setting restricted statuses
-                        && !(request.resource.data.status in ['approved', 'rejected'])
-                        // Prevent changing system fields
-                        && request.resource.data.authorId == resource.data.authorId
-                        // CRITICAL: Prevent client from changing counters directly
-                        && request.resource.data.likeCount == resource.data.likeCount
-                        && request.resource.data.commentCount == resource.data.commentCount
-                       );
+                    || (
+                      isAuthenticated()
+                      && (
+                        (
+                          // Author updates (same as before, counters immutable here)
+                          isAuthor(resource) 
+                          // Prevent setting restricted statuses
+                          && !(request.resource.data.status in ['approved', 'rejected'])
+                          // Prevent changing system fields
+                          && request.resource.data.authorId == resource.data.authorId
+                          // CRITICAL: Prevent client from changing counters directly
+                          && request.resource.data.likeCount == resource.data.likeCount
+                          && request.resource.data.commentCount == resource.data.commentCount
+                        )
+                        ||
+                        (
+                          // Comment counter bump (allow any authenticated user)
+                          isCommentCountUpdate(resource, request.resource)
+                        )
+                      )
+                    );
 
       // DELETE
       allow delete: if isAdmin() 

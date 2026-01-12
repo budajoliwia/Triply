@@ -11,26 +11,36 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../src/context/auth';
 import { auth, db } from '../../src/firebase/client';
 import { getUserPosts, Post } from '../../src/services/posts';
 import { useEffect, useState, useCallback } from 'react';
+import type { UserDoc } from '@triply/shared/src/models';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const ITEM_SIZE = width / COLUMN_COUNT;
+
+type ProfilePostFilter = 'approved' | 'pending';
 
 export default function MyProfileScreen() {
   const { user, isAdmin } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [postFilter, setPostFilter] = useState<ProfilePostFilter>('approved');
 
   const fetchUserPosts = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setPosts([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const userPosts = await getUserPosts(user.uid);
       setPosts(userPosts);
@@ -45,6 +55,37 @@ export default function MyProfileScreen() {
   useEffect(() => {
     fetchUserPosts();
   }, [fetchUserPosts]);
+
+  // Refresh posts when user returns to this tab (Expo Router tabs keep screens mounted).
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserPosts();
+    }, [fetchUserPosts]),
+  );
+
+  useEffect(() => {
+    const fetchUsername = async () => {
+      if (!user) {
+        setUsername(null);
+        return;
+      }
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userDocRef);
+        if (snap.exists()) {
+          const data = snap.data() as UserDoc;
+          setUsername(typeof data.username === 'string' ? data.username : null);
+        } else {
+          setUsername(null);
+        }
+      } catch (error) {
+        console.error('Error fetching username:', error);
+        setUsername(null);
+      }
+    };
+
+    fetchUsername();
+  }, [user]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -93,8 +134,27 @@ export default function MyProfileScreen() {
   const renderHeader = () => (
     <View style={styles.profileHeader}>
       <View style={styles.avatarLarge} />
-      <Text style={styles.name}>Mój Profil</Text>
+      <Text style={styles.name}>{username ? `@${username}` : 'Mój Profil'}</Text>
       <Text style={styles.bio}>Podróżnik | Fotografia | Kawa</Text>
+
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[styles.filterPill, postFilter === 'approved' && styles.filterPillActive]}
+          onPress={() => setPostFilter('approved')}
+        >
+          <Text style={[styles.filterText, postFilter === 'approved' && styles.filterTextActive]}>
+            Zatwierdzone
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterPill, postFilter === 'pending' && styles.filterPillActive]}
+          onPress={() => setPostFilter('pending')}
+        >
+          <Text style={[styles.filterText, postFilter === 'pending' && styles.filterTextActive]}>
+            Oczekujące
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {isAdmin && (
         <TouchableOpacity
@@ -136,13 +196,20 @@ export default function MyProfileScreen() {
     </View>
   );
 
+  const filteredPosts = posts.filter((p) => p.status === postFilter);
+
+  const emptyText =
+    postFilter === 'approved'
+      ? 'Nie masz jeszcze żadnych zatwierdzonych postów.'
+      : 'Brak postów oczekujących na zatwierdzenie.';
+
   return (
     <SafeAreaView style={styles.container}>
       {loading ? (
         <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
       ) : (
         <FlatList
-          data={posts}
+          data={filteredPosts}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           numColumns={COLUMN_COUNT}
@@ -151,7 +218,7 @@ export default function MyProfileScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Nie masz jeszcze żadnych postów.</Text>
+              <Text style={styles.emptyText}>{emptyText}</Text>
             </View>
           }
         />
@@ -194,6 +261,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 15,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f2f2f2',
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: 12,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  filterPillActive: {
+    backgroundColor: '#007AFF',
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+  },
+  filterTextActive: {
+    color: '#fff',
   },
   adminButton: {
     backgroundColor: '#333',

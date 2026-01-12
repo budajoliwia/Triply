@@ -36,6 +36,10 @@ export const onLikeDeleted = onDocumentDeleted('posts/{postId}/likes/{userId}', 
 
 // --- Comments Counters ---
 
+// DISABLED: Client updates counter transactionally for immediate feedback.
+// Having both client update + Cloud Function causes double counting.
+
+/*
 export const onCommentCreated = onDocumentCreated(
   'posts/{postId}/comments/{commentId}',
   async (event) => {
@@ -69,3 +73,4 @@ export const onCommentDeleted = onDocumentDeleted(
     }
   },
 );
+*/
