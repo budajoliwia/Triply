@@ -426,3 +426,44 @@ export async function getComments(postId: string): Promise<Comment[]> {
     throw error;
   }
 }
+
+/**
+ * Fetch a single post by id (approved/draft/pending depending on rules).
+ * Resolves display image URL + author username (cached per call).
+ */
+export async function getPostById(postId: string): Promise<Post | null> {
+  try {
+    const postRef = doc(db, POSTS_COLLECTION, postId);
+    const snap = await getDoc(postRef);
+    if (!snap.exists()) return null;
+
+    const data = snap.data() as PostDoc<Timestamp>;
+
+    let photoUrl: string | undefined = undefined;
+    let authorName = 'Użytkownik';
+
+    if (data.photo?.displayPath) {
+      try {
+        const photoRef = ref(storage, data.photo.displayPath);
+        photoUrl = await getDownloadURL(photoRef);
+      } catch (e) {
+        console.warn('Error fetching photo URL:', e);
+      }
+    }
+
+    if (data.authorId) {
+      const profile = await getUserProfile(data.authorId);
+      if (profile?.username) authorName = profile.username;
+    }
+
+    return {
+      id: snap.id,
+      ...data,
+      photoUrl,
+      authorName,
+    };
+  } catch (error) {
+    console.error('Error fetching post by id:', error);
+    return null;
+  }
+}

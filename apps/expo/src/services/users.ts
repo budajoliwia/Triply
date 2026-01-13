@@ -10,6 +10,7 @@ import {
   query,
   where,
   limit,
+  documentId,
 } from 'firebase/firestore';
 import { db } from '../firebase/client';
 import { UserDoc } from '@triply/shared/src/models';
@@ -18,6 +19,33 @@ const USERS_COLLECTION = 'users';
 
 export interface UserProfile extends UserDoc {
   id: string;
+}
+
+/**
+ * Fetch user profiles in batches (Firestore `in` query max is 10).
+ * Useful to avoid N+1 fetch when rendering notifications.
+ */
+export async function getUserProfilesByIds(userIds: string[]): Promise<Map<string, UserProfile>> {
+  const ids = Array.from(new Set(userIds)).filter(Boolean);
+  const result = new Map<string, UserProfile>();
+  if (ids.length === 0) return result;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+
+  try {
+    for (const chunk of chunks) {
+      const q = query(collection(db, USERS_COLLECTION), where(documentId(), 'in', chunk));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        result.set(d.id, { id: d.id, ...(d.data() as UserDoc) });
+      }
+    }
+  } catch (error) {
+    console.warn('Error fetching user profiles by ids:', error);
+  }
+
+  return result;
 }
 
 /**

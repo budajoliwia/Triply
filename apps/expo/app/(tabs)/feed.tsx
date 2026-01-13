@@ -10,8 +10,12 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Modal,
+  Animated,
+  TouchableWithoutFeedback,
+  Dimensions,
 } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -24,8 +28,15 @@ import {
   toggleLike,
   getPostsByAuthors,
 } from '../../src/services/posts';
-import { getFollowingIds } from '../../src/services/users';
+import { getFollowingIds, getUserProfilesByIds } from '../../src/services/users';
 import { useAuth } from '../../src/context/auth';
+import {
+  markNotificationRead,
+  markNotificationsRead,
+  subscribeNotifications,
+  subscribeUnreadCount,
+  type Notification,
+} from '../../src/services/notifications';
 
 export default function FeedScreen() {
   const { user, isAdmin } = useAuth();
@@ -39,6 +50,106 @@ export default function FeedScreen() {
   const [expandedCommentsLoading, setExpandedCommentsLoading] = useState(false);
   const [commentInput, setCommentInput] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  // --- Notifications (in-app, no push) ---
+  const [notifVisible, setNotifVisible] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [actorCache, setActorCache] = useState<Record<string, { username?: string }>>({});
+  const markedThisOpenRef = useRef(false);
+
+  const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  const sheetHeight = useMemo(() => {
+    const h = Dimensions.get('window').height;
+    return Math.min(620, Math.max(420, Math.floor(h * 0.75)));
+  }, []);
+
+  const openNotifications = useCallback(() => {
+    setNotifVisible(true);
+    markedThisOpenRef.current = false;
+    Animated.timing(sheetAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+  }, [sheetAnim]);
+
+  const closeNotifications = useCallback(() => {
+    Animated.timing(sheetAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
+      setNotifVisible(false);
+    });
+  }, [sheetAnim]);
+
+  const sheetTranslateY = useMemo(
+    () =>
+      sheetAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [sheetHeight, 0],
+      }),
+    [sheetAnim, sheetHeight],
+  );
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setUnreadCount(0);
+      return;
+    }
+    return subscribeUnreadCount(
+      user.uid,
+      (count) => setUnreadCount(count),
+      (error) => console.warn('Unread notifications listener error:', error),
+    );
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !notifVisible) {
+      setNotifications([]);
+      return;
+    }
+    return subscribeNotifications(
+      user.uid,
+      { limit: 30 },
+      (items) => setNotifications(items),
+      (error) => console.warn('Notifications listener error:', error),
+    );
+  }, [user?.uid, notifVisible]);
+
+  useEffect(() => {
+    const actorIds = Array.from(new Set(notifications.map((n) => n.actorId).filter(Boolean)));
+    const missing = actorIds.filter((id) => !actorCache[id]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const map = await getUserProfilesByIds(missing);
+      if (cancelled) return;
+      setActorCache((prev) => {
+        const next = { ...prev };
+        map.forEach((profile, id) => {
+          next[id] = { username: profile.username };
+        });
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notifications, actorCache]);
+
+  // Mark visible notifications as read once per open.
+  useEffect(() => {
+    if (!notifVisible || !user?.uid) return;
+    if (markedThisOpenRef.current) return;
+    if (notifications.length === 0) return;
+
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
+    if (unreadIds.length === 0) {
+      markedThisOpenRef.current = true;
+      return;
+    }
+    markedThisOpenRef.current = true;
+
+    markNotificationsRead(unreadIds).catch((e) => {
+      console.warn('Failed to mark notifications read:', e);
+    });
+  }, [notifVisible, notifications, user?.uid]);
 
   const fetchPosts = async () => {
     try {
@@ -309,6 +420,19 @@ export default function FeedScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.notificationsButton}
+          onPress={openNotifications}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="notifications-outline" size={22} color="#333" />
+          {unreadCount > 0 && (
+            <View style={styles.notificationsBadge}>
+              <Text style={styles.notificationsBadgeText}>{unreadCount >= 10 ? '9+' : String(unreadCount)}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -332,6 +456,93 @@ export default function FeedScreen() {
           }
         />
       )}
+
+      <Modal visible={notifVisible} transparent animationType="none" onRequestClose={closeNotifications}>
+        <View style={styles.sheetOverlay}>
+          <TouchableWithoutFeedback onPress={closeNotifications}>
+            <View style={styles.sheetBackdrop} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View style={[styles.sheetContainer, { height: sheetHeight, transform: [{ translateY: sheetTranslateY }] }]}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Powiadomienia</Text>
+              <TouchableOpacity
+                onPress={closeNotifications}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {!user ? (
+              <View style={styles.sheetEmpty}>
+                <Text style={styles.sheetEmptyText}>Zaloguj się, aby zobaczyć powiadomienia.</Text>
+              </View>
+            ) : notifications.length === 0 ? (
+              <View style={styles.sheetEmpty}>
+                <Text style={styles.sheetEmptyText}>Brak powiadomień.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={(n) => n.id}
+                contentContainerStyle={styles.sheetListContent}
+                renderItem={({ item: n }) => {
+                  const username = actorCache[n.actorId]?.username;
+                  const actorLabel = username ? `@${username}` : 'Użytkownik';
+
+                  const message =
+                    n.type === 'follow'
+                      ? `${actorLabel} zaczął/a Cię obserwować`
+                      : n.type === 'like'
+                        ? `${actorLabel} polubił/a Twój post`
+                        : `${actorLabel} skomentował/a Twój post`;
+
+                  const dateLabel = n.createdAt?.seconds
+                    ? new Date(n.createdAt.seconds * 1000).toLocaleDateString()
+                    : 'Teraz';
+
+                  const onPress = async () => {
+                    // Optimistic UI update so it doesn't keep showing as unread.
+                    if (!n.read) {
+                      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+                    }
+                    try {
+                      if (!n.read) await markNotificationRead(n.id);
+                    } catch (e) {
+                      console.warn('Failed to mark notification read:', e);
+                      // revert on failure
+                      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: false } : x)));
+                    }
+
+                    closeNotifications();
+                    if (n.type === 'follow') {
+                      router.push(`/profile/${n.actorId}`);
+                      return;
+                    }
+                    if (n.postId) {
+                      router.push(`/post/${n.postId}`);
+                    }
+                  };
+
+                  return (
+                    <TouchableOpacity style={styles.notifRow} onPress={onPress}>
+                      <View style={styles.notifAvatar} />
+                      <View style={styles.notifBody}>
+                        <Text style={[styles.notifText, !n.read && styles.notifTextUnread]} numberOfLines={2}>
+                          {message}
+                        </Text>
+                        <Text style={styles.notifTime}>{dateLabel}</Text>
+                      </View>
+                      {!n.read && <View style={styles.notifUnreadDot} />}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -348,6 +559,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     alignItems: 'center',
+    position: 'relative',
   },
   appTitle: {
     fontSize: 20,
@@ -360,6 +572,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     borderRadius: 20,
     padding: 2,
+  },
+  notificationsButton: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationsBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationsBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   toggleButton: {
     paddingVertical: 6,
@@ -459,6 +699,84 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#888',
     fontSize: 16,
+  },
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sheetContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 10,
+    overflow: 'hidden',
+  },
+  sheetHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111',
+  },
+  sheetEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  sheetEmptyText: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  sheetListContent: {
+    paddingVertical: 8,
+  },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  notifAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ddd',
+    marginRight: 12,
+  },
+  notifBody: {
+    flex: 1,
+  },
+  notifText: {
+    color: '#222',
+    fontSize: 14,
+  },
+  notifTextUnread: {
+    fontWeight: '700',
+  },
+  notifTime: {
+    marginTop: 2,
+    color: '#888',
+    fontSize: 12,
+  },
+  notifUnreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#007AFF',
+    marginLeft: 10,
   },
   commentsSection: {
     marginTop: 10,

@@ -1,6 +1,7 @@
 import { onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { createNotificationIfNotDuplicated } from '../services/notifications';
 
 const db = getFirestore();
 
@@ -8,6 +9,7 @@ const db = getFirestore();
 
 export const onLikeCreated = onDocumentCreated('posts/{postId}/likes/{userId}', async (event) => {
   const postId = event.params.postId;
+  const likerUid = event.params.userId;
   const postRef = db.collection('posts').doc(postId);
 
   try {
@@ -15,6 +17,32 @@ export const onLikeCreated = onDocumentCreated('posts/{postId}/likes/{userId}', 
       likeCount: FieldValue.increment(1),
     });
     logger.info(`Incremented likeCount for post ${postId}`);
+
+    // Create notification for post author (unless self-like)
+    try {
+      const postSnap = await postRef.get();
+      if (!postSnap.exists) {
+        logger.warn('[notifications][like] missing_post', { postId, likerUid, eventId: event.id });
+        return;
+      }
+      const postData = postSnap.data() as { authorId?: unknown };
+      const authorId = typeof postData.authorId === 'string' ? postData.authorId : null;
+      if (!authorId) {
+        logger.warn('[notifications][like] invalid_post_authorId', { postId, likerUid, eventId: event.id });
+        return;
+      }
+
+      await createNotificationIfNotDuplicated(db, {
+        targetUserId: authorId,
+        actorId: likerUid,
+        type: 'like',
+        postId,
+        eventId: event.id,
+      });
+    } catch (e) {
+      logger.error('[notifications][like] failed', { postId, likerUid, eventId: event.id, error: e });
+      // do not throw: likeCount increment already done, and we prefer not retrying just for notification.
+    }
   } catch (error) {
     logger.error(`Error incrementing likeCount for post ${postId}`, error);
   }

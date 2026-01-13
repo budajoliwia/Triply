@@ -138,6 +138,24 @@ service cloud.firestore {
         allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
       }
     }
+
+    // --- Notifications Collection ---
+    // notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.targetUserId;
+
+      // Clients cannot create or delete notifications (backend only).
+      allow create, delete: if false;
+
+      // Optional: allow client to mark as read, without changing other fields.
+      allow update: if isAuthenticated()
+                    && request.auth.uid == resource.data.targetUserId
+                    // only allow transitioning to read=true
+                    && resource.data.read == false
+                    && request.resource.data.read == true
+                    // and only the 'read' field may change
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
     
     match /{document=**} {
       allow read, write: if false;

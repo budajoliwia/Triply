@@ -9,7 +9,7 @@
   "scripts": {
     "expo": "npm --prefix apps/expo run start",
     "web": "npm --prefix apps/expo run web",
-    "emulators": "firebase emulators:start",
+    "emulators": "npm --prefix functions run build && firebase emulators:start",
     "functions:build": "npm --prefix functions run build",
     "lint": "eslint .",
     "format": "prettier --write .",
