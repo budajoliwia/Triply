@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/auth';
 import { addComment, deleteComment, getComments, getPostById, toggleLike, type Comment, type Post } from '../../src/services/posts';
+import { Avatar } from '../../src/components/Avatar';
 
 export default function PostDetailsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -183,7 +184,7 @@ export default function PostDetailsScreen() {
               onPress={() => post.authorId && router.push(`/profile/${post.authorId}`)}
               disabled={!post.authorId}
             >
-              <View style={styles.avatarPlaceholder} />
+              <Avatar size={40} uri={post.authorAvatarUrl} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.username}>{post.authorName || 'Użytkownik'}</Text>
                 <Text style={styles.time}>
@@ -220,7 +221,11 @@ export default function PostDetailsScreen() {
           return (
             <View style={styles.commentContainer}>
               <View style={styles.commentHeader}>
-                <TouchableOpacity onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}>
+                <TouchableOpacity
+                  style={styles.commentAuthorRow}
+                  onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}
+                >
+                  <Avatar size={24} uri={item.authorAvatarUrl} />
                   <Text style={styles.commentAuthor}>{item.authorName || 'Użytkownik'}</Text>
                 </TouchableOpacity>
                 <Text style={styles.commentTime}>
@@ -317,13 +322,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ddd',
-    marginRight: 10,
-  },
   username: {
     fontWeight: 'bold',
     fontSize: 16,
@@ -381,10 +379,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 5,
   },
+  commentAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   commentAuthor: {
     fontWeight: 'bold',
     fontSize: 14,
     color: '#333',
+    marginLeft: 8,
   },
   commentTime: {
     fontSize: 12,

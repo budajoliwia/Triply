@@ -22,6 +22,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../src/firebase/client';
+import { Avatar } from '../../src/components/Avatar';
+import { getDownloadUrlCached } from '../../src/firebase/storage';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -32,6 +34,7 @@ export default function PublicProfileScreen() {
   const { user } = useAuth();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
@@ -50,13 +53,28 @@ export default function PublicProfileScreen() {
 
     setLoading(true);
     const userRef = doc(db, 'users', userId);
+    let active = true;
     const unsubscribe = onSnapshot(
       userRef,
-      (snap) => {
+      async (snap) => {
         if (!snap.exists()) {
           setProfile(null);
+          setAvatarUrl(null);
         } else {
-          setProfile({ id: snap.id, ...(snap.data() as Omit<UserProfile, 'id'>) });
+          const next = { id: snap.id, ...(snap.data() as Omit<UserProfile, 'id'>) };
+          setProfile(next);
+          const avatarPath = typeof next.avatarPath === 'string' ? next.avatarPath : null;
+          if (!avatarPath) {
+            setAvatarUrl(null);
+          } else {
+            try {
+              const url = await getDownloadUrlCached(avatarPath);
+              if (active) setAvatarUrl(url);
+            } catch (e) {
+              console.warn('Failed to load avatar URL:', e);
+              if (active) setAvatarUrl(null);
+            }
+          }
         }
         setLoading(false);
       },
@@ -67,7 +85,10 @@ export default function PublicProfileScreen() {
       },
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [userId]);
 
   // Firestore is the source of truth (following state = existence of doc)
@@ -140,9 +161,11 @@ export default function PublicProfileScreen() {
 
     return (
       <View style={styles.header}>
-        <View style={styles.avatarLarge} />
+        <Avatar size={100} uri={avatarUrl} />
         <Text style={styles.name}>{profile.username ? `@${profile.username}` : 'Użytkownik'}</Text>
-        <Text style={styles.bio}>Podróżnik | Fotografia | Kawa</Text>
+        <Text style={[styles.bio, !profile.bio && styles.bioPlaceholder]} numberOfLines={3}>
+          {profile.bio ? profile.bio : 'Brak opisu'}
+        </Text>
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
@@ -240,13 +263,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  avatarLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#ddd',
-    marginBottom: 15,
-  },
   name: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -256,6 +272,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  bioPlaceholder: {
+    color: '#999',
   },
   statsRow: {
     flexDirection: 'row',

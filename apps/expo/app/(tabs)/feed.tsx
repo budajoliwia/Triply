@@ -30,6 +30,7 @@ import {
 } from '../../src/services/posts';
 import { getFollowingIds, getUserProfilesByIds } from '../../src/services/users';
 import { useAuth } from '../../src/context/auth';
+import { Avatar } from '../../src/components/Avatar';
 import {
   markNotificationRead,
   markNotificationsRead,
@@ -302,7 +303,7 @@ export default function FeedScreen() {
           onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}
           disabled={!item.authorId}
         >
-          <View style={styles.avatarPlaceholder} />
+          <Avatar size={40} uri={item.authorAvatarUrl} />
           <View>
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
             <Text style={styles.time}>
@@ -346,7 +347,11 @@ export default function FeedScreen() {
                   return (
                     <View key={c.id} style={styles.commentRow}>
                       <View style={styles.commentHeaderRow}>
-                        <TouchableOpacity onPress={() => c.authorId && router.push(`/profile/${c.authorId}`)}>
+                        <TouchableOpacity
+                          style={styles.commentAuthorRow}
+                          onPress={() => c.authorId && router.push(`/profile/${c.authorId}`)}
+                        >
+                          <Avatar size={24} uri={c.authorAvatarUrl} />
                           <Text style={styles.commentAuthor}>{c.authorName || 'Użytkownik'}</Text>
                         </TouchableOpacity>
                         {canDelete && (
@@ -646,13 +651,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ddd',
-    marginRight: 10,
-  },
   username: {
     fontWeight: 'bold',
     fontSize: 16,
@@ -807,10 +805,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  commentAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   commentAuthor: {
     fontWeight: 'bold',
     fontSize: 13,
     color: '#333',
+    marginLeft: 8,
   },
   commentDelete: {
     color: '#ff4444',

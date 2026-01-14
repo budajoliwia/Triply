@@ -40,6 +40,12 @@ export interface UserDoc<TTimestamp = unknown> {
   usernameLower: string;
   role: UserRole;
 
+  /** Optional user bio (max 160 chars) */
+  bio?: string | null;
+
+  /** Optional Storage path, e.g. "avatars/{uid}.jpg" */
+  avatarPath?: string | null;
+
   /** Default: 5 */
   dailyPostLimit: number;
 

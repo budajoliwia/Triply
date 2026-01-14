@@ -11,14 +11,19 @@ import {
   where,
   limit,
   documentId,
+  updateDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '../firebase/client';
 import { UserDoc } from '@triply/shared/src/models';
+import { getDownloadUrlCached, uploadUserAvatarJpeg } from '../firebase/storage';
 
 const USERS_COLLECTION = 'users';
 
 export interface UserProfile extends UserDoc {
   id: string;
+  /** Resolved download URL for display (not stored in Firestore) */
+  avatarUrl?: string;
 }
 
 /**
@@ -63,6 +68,55 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     console.warn(`Error fetching user profile for ${userId}:`, error);
     return null;
   }
+}
+
+export async function resolveAvatarUrl(avatarPath?: string | null): Promise<string | null> {
+  if (!avatarPath) return null;
+  try {
+    return await getDownloadUrlCached(avatarPath);
+  } catch (e) {
+    console.warn('Failed to resolve avatar download URL:', e);
+    return null;
+  }
+}
+
+export type UpdateMyProfileParams = {
+  userId: string;
+  bio?: string | null;
+  /** Local file URI (already resized/compressed) */
+  avatarLocalUri?: string | null;
+};
+
+/**
+ * Updates the current user's profile fields (bio + avatarPath).
+ * Storage upload is performed first (stable path overwrite), then Firestore update.
+ */
+export async function updateMyProfile({
+  userId,
+  bio,
+  avatarLocalUri,
+}: UpdateMyProfileParams): Promise<{ avatarPath?: string | null }> {
+  const updates: Record<string, unknown> = {};
+
+  const bioTrimmed = typeof bio === 'string' ? bio.trim() : '';
+  if (bio === null) {
+    updates.bio = deleteField();
+  } else if (!bioTrimmed) {
+    updates.bio = deleteField();
+  } else {
+    updates.bio = bioTrimmed.slice(0, 160);
+  }
+
+  let avatarPath: string | null | undefined = undefined;
+  if (avatarLocalUri) {
+    avatarPath = await uploadUserAvatarJpeg(userId, avatarLocalUri);
+    updates.avatarPath = avatarPath;
+  }
+
+  const userRef = doc(db, USERS_COLLECTION, userId);
+  await updateDoc(userRef, updates);
+
+  return { avatarPath };
 }
 
 /**

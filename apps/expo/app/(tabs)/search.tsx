@@ -11,7 +11,8 @@ import {
 import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { searchUsers, UserProfile } from '../../src/services/users';
+import { resolveAvatarUrl, searchUsers, UserProfile } from '../../src/services/users';
+import { Avatar } from '../../src/components/Avatar';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -41,7 +42,13 @@ export default function SearchScreen() {
       setLoading(true);
       try {
         const users = await searchUsers(debouncedQuery);
-        setResults(users);
+        const withAvatars = await Promise.all(
+          users.map(async (u) => {
+            const avatarUrl = await resolveAvatarUrl(u.avatarPath);
+            return { ...u, avatarUrl: avatarUrl || undefined };
+          }),
+        );
+        setResults(withAvatars);
       } catch (error) {
         console.error(error);
       } finally {
@@ -57,7 +64,7 @@ export default function SearchScreen() {
       style={styles.userItem}
       onPress={() => router.push(`/profile/${item.id}`)}
     >
-      <View style={styles.avatarPlaceholder} />
+      <Avatar size={40} uri={item.avatarUrl} />
       <View style={styles.userInfo}>
         <Text style={styles.username}>{item.username}</Text>
         <Text style={styles.email}>{item.email}</Text>
@@ -156,13 +163,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-  },
-  avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ddd',
-    marginRight: 15,
   },
   userInfo: {
     flex: 1,

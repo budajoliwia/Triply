@@ -14,6 +14,17 @@ service firebase.storage {
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
+    // User avatars (stable overwrite path to avoid multiplying files)
+    // App path: avatars/{uid}.jpg
+    // Read: authenticated-only (consistent with posts; avatars are still personal data).
+    match /avatars/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+                   && fileName == (request.auth.uid + '.jpg')
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
     // Default block all
     match /{allPaths=**} {
       allow read, write: if false;

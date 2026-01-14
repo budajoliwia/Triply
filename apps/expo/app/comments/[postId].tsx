@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { getComments, addComment, deleteComment, Comment } from '../../src/services/posts';
 import { useAuth } from '../../src/context/auth';
+import { Avatar } from '../../src/components/Avatar';
 
 export default function CommentsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -91,7 +92,11 @@ export default function CommentsScreen() {
     return (
       <View style={styles.commentContainer}>
         <View style={styles.commentHeader}>
-          <TouchableOpacity onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}>
+          <TouchableOpacity
+            style={styles.authorRow}
+            onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}
+          >
+            <Avatar size={24} uri={item.authorAvatarUrl} />
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
           </TouchableOpacity>
           <Text style={styles.timestamp}>
@@ -208,11 +213,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 5,
+    alignItems: 'center',
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   username: {
     fontWeight: 'bold',
     fontSize: 14,
     color: '#333',
+    marginLeft: 8,
   },
   timestamp: {
     fontSize: 12,

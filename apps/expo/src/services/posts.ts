@@ -18,7 +18,8 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/client';
 import { PostDoc, PostStatus } from '@triply/shared/src/models';
-import { getUserProfile } from './users';
+import { getUserProfilesByIds } from './users';
+import { getDownloadUrlCached } from '../firebase/storage';
 
 const POSTS_COLLECTION = 'posts';
 const POST_NOT_FOUND_CODE = 'post/not-found';
@@ -39,6 +40,7 @@ export interface Post extends PostDoc<Timestamp> {
   id: string;
   photoUrl?: string; // resolved download URL for display
   authorName?: string;
+  authorAvatarUrl?: string;
 }
 
 export interface Comment {
@@ -47,6 +49,7 @@ export interface Comment {
   text: string;
   createdAt: Timestamp;
   authorName?: string;
+  authorAvatarUrl?: string;
 }
 
 /**
@@ -142,13 +145,29 @@ function sortPostsNewestFirst(a: PostDoc<unknown>, b: PostDoc<unknown>): number 
  * Helper to process post documents (resolve URLs and author names)
  */
 async function processPostDocs(docs: any[]): Promise<Post[]> {
-  const userCache: Record<string, string> = {};
+  const authorIds = Array.from(
+    new Set(
+      docs
+        .map((d) => {
+          try {
+            return (d.data() as PostDoc<Timestamp>)?.authorId;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean),
+    ),
+  ) as string[];
+
+  const profilesById = await getUserProfilesByIds(authorIds);
+  const avatarUrlByPath: Record<string, string> = {};
 
   return Promise.all(
     docs.map(async (docSnap) => {
       const data = docSnap.data() as PostDoc<Timestamp>;
       let photoUrl = undefined;
       let authorName = 'Użytkownik';
+      let authorAvatarUrl: string | undefined = undefined;
 
       if (data.photo?.displayPath) {
         try {
@@ -159,15 +178,21 @@ async function processPostDocs(docs: any[]): Promise<Post[]> {
         }
       }
 
-      if (data.authorId) {
-        if (userCache[data.authorId]) {
-          authorName = userCache[data.authorId];
-        } else {
-          const profile = await getUserProfile(data.authorId);
-          if (profile?.username) {
-            authorName = profile.username;
-            userCache[data.authorId] = authorName;
+      const profile = data.authorId ? profilesById.get(data.authorId) : undefined;
+      if (profile?.username) authorName = profile.username;
+
+      const avatarPath = profile?.avatarPath;
+      if (typeof avatarPath === 'string' && avatarPath) {
+        try {
+          if (avatarUrlByPath[avatarPath]) {
+            authorAvatarUrl = avatarUrlByPath[avatarPath];
+          } else {
+            const url = await getDownloadUrlCached(avatarPath);
+            avatarUrlByPath[avatarPath] = url;
+            authorAvatarUrl = url;
           }
+        } catch (e) {
+          console.warn('Error fetching avatar URL:', e);
         }
       }
 
@@ -176,6 +201,7 @@ async function processPostDocs(docs: any[]): Promise<Post[]> {
         ...data,
         photoUrl,
         authorName,
+        authorAvatarUrl,
       };
     })
   );
@@ -392,35 +418,40 @@ export async function getComments(postId: string): Promise<Comment[]> {
   const q = query(commentsRef, orderBy('createdAt', 'asc'));
   try {
     const snapshot = await getDocs(q);
-    
-    const userCache: Record<string, string> = {};
 
-    const comments = await Promise.all(
-      snapshot.docs.map(async (doc) => {
-        const data = doc.data() as Omit<Comment, 'id' | 'authorName'>;
-        let authorName = 'Użytkownik';
+    const raw = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) }));
+    const authorIds = Array.from(new Set(raw.map((c) => c.authorId).filter(Boolean)));
+    const profilesById = await getUserProfilesByIds(authorIds);
+    const avatarUrlByPath: Record<string, string> = {};
 
-        if (data.authorId) {
-          if (userCache[data.authorId]) {
-            authorName = userCache[data.authorId];
-          } else {
-            const profile = await getUserProfile(data.authorId);
-            if (profile?.username) {
-              authorName = profile.username;
-              userCache[data.authorId] = authorName;
+    return await Promise.all(
+      raw.map(async (c) => {
+        const profile = profilesById.get(c.authorId);
+        const authorName = profile?.username || 'Użytkownik';
+
+        let authorAvatarUrl: string | undefined = undefined;
+        const avatarPath = profile?.avatarPath;
+        if (typeof avatarPath === 'string' && avatarPath) {
+          try {
+            if (avatarUrlByPath[avatarPath]) {
+              authorAvatarUrl = avatarUrlByPath[avatarPath];
+            } else {
+              const url = await getDownloadUrlCached(avatarPath);
+              avatarUrlByPath[avatarPath] = url;
+              authorAvatarUrl = url;
             }
+          } catch (e) {
+            console.warn('Error fetching comment avatar URL:', e);
           }
         }
 
         return {
-          id: doc.id,
-          ...data,
+          ...c,
           authorName,
+          authorAvatarUrl,
         };
-      })
+      }),
     );
-
-    return comments;
   } catch (error) {
     console.error('Error fetching comments:', error);
     throw error;
@@ -441,6 +472,7 @@ export async function getPostById(postId: string): Promise<Post | null> {
 
     let photoUrl: string | undefined = undefined;
     let authorName = 'Użytkownik';
+    let authorAvatarUrl: string | undefined = undefined;
 
     if (data.photo?.displayPath) {
       try {
@@ -452,8 +484,17 @@ export async function getPostById(postId: string): Promise<Post | null> {
     }
 
     if (data.authorId) {
-      const profile = await getUserProfile(data.authorId);
+      const profilesById = await getUserProfilesByIds([data.authorId]);
+      const profile = profilesById.get(data.authorId);
       if (profile?.username) authorName = profile.username;
+      const avatarPath = profile?.avatarPath;
+      if (typeof avatarPath === 'string' && avatarPath) {
+        try {
+          authorAvatarUrl = await getDownloadUrlCached(avatarPath);
+        } catch (e) {
+          console.warn('Error fetching avatar URL:', e);
+        }
+      }
     }
 
     return {
@@ -461,6 +502,7 @@ export async function getPostById(postId: string): Promise<Post | null> {
       ...data,
       photoUrl,
       authorName,
+      authorAvatarUrl,
     };
   } catch (error) {
     console.error('Error fetching post by id:', error);

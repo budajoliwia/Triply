@@ -26,6 +26,24 @@ service cloud.firestore {
       let nextFollowing = request.resource.data.get('followingCount', currentFollowing);
       return nextFollowers == currentFollowers && nextFollowing == currentFollowing;
     }
+
+    function isValidBio() {
+      return !('bio' in request.resource.data)
+        || request.resource.data.bio == null
+        || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160);
+    }
+
+    function isValidAvatarPath(userId) {
+      return !('avatarPath' in request.resource.data)
+        || request.resource.data.avatarPath == null
+        || (request.resource.data.avatarPath is string
+            && request.resource.data.avatarPath == ('avatars/' + userId + '.jpg'));
+    }
+
+    function onlyProfileFieldsChanged() {
+      // Allow editing ONLY user-facing profile fields from the client.
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bio', 'avatarPath']);
+    }
     
     // Allow ONLY commentCount +/- 1 (and updatedAt change) while all other fields stay identical.
     function isCommentCountUpdate(resource, requestResource) {
@@ -50,11 +68,16 @@ service cloud.firestore {
       allow read: if true; 
       // Create user doc (registration)
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      // Allow updates, but never allow clients to update follow counters directly.
+      // Production hardening:
+      // - ONLY the owner may update their own profile fields (bio/avatarPath)
+      // - clients cannot modify role, limits, counters, etc. (Cloud Functions bypass rules)
       allow update: if isAuthenticated()
-                    && (request.auth.uid == userId || isAdmin())
-                    && userCountersUnchanged();
-      allow delete: if isAuthenticated() && isAdmin();
+                    && request.auth.uid == userId
+                    && userCountersUnchanged()
+                    && onlyProfileFieldsChanged()
+                    && isValidBio()
+                    && isValidAvatarPath(userId);
+      allow delete: if false;
 
       // --- Following Subcollection ---
       // users/{userId}/following/{targetUid}

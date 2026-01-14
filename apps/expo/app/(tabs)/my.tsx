@@ -9,16 +9,17 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../src/context/auth';
 import { auth, db } from '../../src/firebase/client';
 import { getUserPosts, Post } from '../../src/services/posts';
 import { useEffect, useState, useCallback } from 'react';
 import type { UserDoc } from '@triply/shared/src/models';
+import { Avatar } from '../../src/components/Avatar';
+import { getDownloadUrlCached, invalidateDownloadUrl } from '../../src/firebase/storage';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -28,10 +29,14 @@ type ProfilePostFilter = 'approved' | 'pending';
 
 export default function MyProfileScreen() {
   const { user, isAdmin } = useAuth();
+  const { refreshAvatar } = useLocalSearchParams<{ refreshAvatar?: string }>();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [bio, setBio] = useState<string | null>(null);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [postFilter, setPostFilter] = useState<ProfilePostFilter>('approved');
 
@@ -68,33 +73,82 @@ export default function MyProfileScreen() {
   useEffect(() => {
     if (!user) {
       setUsername(null);
+      setBio(null);
+      setAvatarPath(null);
+      setAvatarUrl(null);
       setStats({ followers: 0, following: 0 });
       return;
     }
 
     const userDocRef = doc(db, 'users', user.uid);
+    let active = true;
     const unsubscribe = onSnapshot(
       userDocRef,
-      (snap) => {
+      async (snap) => {
         if (!snap.exists()) {
           setUsername(null);
+          setBio(null);
+          setAvatarPath(null);
+          setAvatarUrl(null);
           setStats({ followers: 0, following: 0 });
           return;
         }
         const data = snap.data() as UserDoc;
         setUsername(typeof data.username === 'string' ? data.username : null);
+        setBio(typeof data.bio === 'string' ? data.bio : null);
+        const nextAvatarPath = typeof data.avatarPath === 'string' ? data.avatarPath : null;
+        setAvatarPath(nextAvatarPath);
         setStats({
           followers: typeof data.followersCount === 'number' ? data.followersCount : 0,
           following: typeof data.followingCount === 'number' ? data.followingCount : 0,
         });
+
+        // Resolve avatar URL only when path exists.
+        if (!nextAvatarPath) {
+          setAvatarUrl(null);
+          return;
+        }
+        try {
+          const url = await getDownloadUrlCached(nextAvatarPath);
+          if (!active) return;
+          setAvatarUrl(url);
+        } catch (e) {
+          console.warn('Failed to load avatar URL:', e);
+          if (!active) return;
+          setAvatarUrl(null);
+        }
       },
       (error) => {
         console.error('Error subscribing to user doc:', error);
       },
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [user]);
+
+  // When coming back from edit, force avatar URL refresh (same path overwrite).
+  useEffect(() => {
+    if (!avatarPath) return;
+    if (!refreshAvatar) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        invalidateDownloadUrl(avatarPath);
+        const url = await getDownloadUrlCached(avatarPath);
+        if (!cancelled) setAvatarUrl(url);
+      } catch (e) {
+        console.warn('Failed to refresh avatar URL:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAvatar, avatarPath]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -106,18 +160,6 @@ export default function MyProfileScreen() {
       await signOut(auth);
     } catch (error) {
       console.error('Error signing out:', error);
-    }
-  };
-
-  const promoteToAdmin = async () => {
-    if (!user) return;
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, { role: 'admin' });
-      Alert.alert('Sukces', 'Twoje konto ma teraz uprawnienia administratora. Odśwież aplikację.');
-    } catch (error) {
-      console.error('Error promoting to admin:', error);
-      Alert.alert('Błąd', 'Nie udało się nadać uprawnień admina.');
     }
   };
 
@@ -142,9 +184,15 @@ export default function MyProfileScreen() {
 
   const renderHeader = () => (
     <View style={styles.profileHeader}>
-      <View style={styles.avatarLarge} />
+      <Avatar size={100} uri={avatarUrl} cacheBuster={refreshAvatar} />
       <Text style={styles.name}>{username ? `@${username}` : 'Mój Profil'}</Text>
-      <Text style={styles.bio}>Podróżnik | Fotografia | Kawa</Text>
+      <Text style={[styles.bio, !bio && styles.bioPlaceholder]} numberOfLines={3}>
+        {bio ? bio : 'Dodaj krótki opis o sobie'}
+      </Text>
+
+      <TouchableOpacity style={styles.editProfileButton} onPress={() => router.push('/edit-profile')}>
+        <Text style={styles.editProfileButtonText}>Edytuj profil</Text>
+      </TouchableOpacity>
 
       <View style={styles.filterRow}>
         <TouchableOpacity
@@ -171,16 +219,6 @@ export default function MyProfileScreen() {
           onPress={() => router.push('/admin/moderation')}
         >
           <Text style={styles.adminButtonText}>Panel Admina (Moderacja)</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Temporary Dev Button */}
-      {!isAdmin && (
-        <TouchableOpacity
-          style={[styles.adminButton, styles.devButton]}
-          onPress={promoteToAdmin}
-        >
-          <Text style={styles.adminButtonText}>DEV: Make Me Admin</Text>
         </TouchableOpacity>
       )}
 
@@ -254,13 +292,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     marginBottom: 5,
   },
-  avatarLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#ddd',
-    marginBottom: 15,
-  },
   name: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -270,6 +301,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 15,
+    textAlign: 'center',
+  },
+  bioPlaceholder: {
+    color: '#999',
+  },
+  editProfileButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  editProfileButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   filterRow: {
     flexDirection: 'row',
@@ -300,9 +347,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginBottom: 10,
-  },
-  devButton: {
-    backgroundColor: 'orange',
   },
   adminButtonText: {
     color: '#fff',
