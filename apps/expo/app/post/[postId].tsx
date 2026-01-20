@@ -16,8 +16,32 @@ import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/auth';
-import { addComment, deleteComment, getComments, getPostById, toggleLike, type Comment, type Post } from '../../src/services/posts';
+import {
+  addComment,
+  deleteComment,
+  getComments,
+  getPostById,
+  getPostEvents,
+  toggleLike,
+  type Comment,
+  type Post,
+  type PostEvent,
+} from '../../src/services/posts';
 import { Avatar } from '../../src/components/Avatar';
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function formatEventTime(createdAt?: { toDate: () => Date }): string {
+  if (!createdAt) return '--:-- --.--';
+  const d = createdAt.toDate();
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())} ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}`;
+}
+
+function actorLabel(actorId: string): string {
+  return actorId === 'system' ? 'system' : actorId;
+}
 
 export default function PostDetailsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -32,6 +56,9 @@ export default function PostDetailsScreen() {
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [inputText, setInputText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [postEvents, setPostEvents] = useState<PostEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +92,27 @@ export default function PostDetailsScreen() {
   useEffect(() => {
     refreshComments();
   }, [postId]);
+
+  useEffect(() => {
+    if (!postId || !isAdmin) return;
+    let cancelled = false;
+
+    (async () => {
+      setEventsLoading(true);
+      try {
+        const events = await getPostEvents(postId);
+        if (!cancelled) setPostEvents(events);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setEventsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [postId, isAdmin]);
 
   const handleLike = async () => {
     if (!post) return;
@@ -212,6 +260,23 @@ export default function PostDetailsScreen() {
                 </View>
               </View>
             </View>
+
+            {isAdmin && (
+              <View style={styles.eventsContainer}>
+                <Text style={styles.eventsTitle}>Post events</Text>
+                {eventsLoading ? (
+                  <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 8 }} />
+                ) : postEvents.length === 0 ? (
+                  <Text style={styles.eventsEmpty}>Brak zdarzeń.</Text>
+                ) : (
+                  postEvents.map((ev) => (
+                    <Text key={ev.id} style={styles.eventRow}>
+                      [{formatEventTime(ev.createdAt)}] {actorLabel(ev.actorId)} – {ev.type}
+                    </Text>
+                  ))
+                )}
+              </View>
+            )}
 
             <Text style={styles.commentsTitle}>Komentarze</Text>
           </View>
@@ -367,6 +432,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 6,
     marginBottom: 6,
+  },
+  eventsContainer: {
+    marginTop: 6,
+    marginBottom: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  eventsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+    color: '#333',
+  },
+  eventsEmpty: {
+    color: '#888',
+    fontSize: 12,
+  },
+  eventRow: {
+    color: '#333',
+    fontSize: 12,
+    marginBottom: 4,
   },
   commentContainer: {
     marginBottom: 12,

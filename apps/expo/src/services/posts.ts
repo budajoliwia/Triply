@@ -14,9 +14,10 @@ import {
   Timestamp,
   runTransaction,
   documentId,
+  writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase/client';
+import { auth, db, storage } from '../firebase/client';
 import { PostDoc, PostStatus } from '@triply/shared/src/models';
 import { getUserProfilesByIds } from './users';
 import { getDownloadUrlCached } from '../firebase/storage';
@@ -50,6 +51,13 @@ export interface Comment {
   createdAt: Timestamp;
   authorName?: string;
   authorAvatarUrl?: string;
+}
+
+export interface PostEvent {
+  id: string;
+  type: string;
+  actorId: string;
+  createdAt?: Timestamp;
 }
 
 /**
@@ -292,10 +300,22 @@ export async function getPostsByAuthors(authorIds: string[]): Promise<Post[]> {
 export async function approvePost(postId: string): Promise<void> {
   try {
     const postRef = doc(db, POSTS_COLLECTION, postId);
-    await updateDoc(postRef, {
+    const actorId = auth.currentUser?.uid ?? 'system';
+
+    const batch = writeBatch(db);
+    batch.update(postRef, {
       status: 'approved',
       updatedAt: serverTimestamp(),
     });
+
+    const eventRef = doc(collection(db, POSTS_COLLECTION, postId, 'postEvents'));
+    batch.set(eventRef, {
+      type: 'approved',
+      actorId,
+      createdAt: serverTimestamp(),
+    });
+
+    await batch.commit();
   } catch (error) {
     console.error('Error approving post:', error);
     throw error;
@@ -308,14 +328,36 @@ export async function approvePost(postId: string): Promise<void> {
 export async function rejectPost(postId: string): Promise<void> {
   try {
     const postRef = doc(db, POSTS_COLLECTION, postId);
-    await updateDoc(postRef, {
+    const actorId = auth.currentUser?.uid ?? 'system';
+
+    const batch = writeBatch(db);
+    batch.update(postRef, {
       status: 'rejected',
       updatedAt: serverTimestamp(),
     });
+
+    const eventRef = doc(collection(db, POSTS_COLLECTION, postId, 'postEvents'));
+    batch.set(eventRef, {
+      type: 'rejected',
+      actorId,
+      createdAt: serverTimestamp(),
+    });
+
+    await batch.commit();
   } catch (error) {
     console.error('Error rejecting post:', error);
     throw error;
   }
+}
+
+/**
+ * Fetch audit events for a post (admin-only in UI).
+ */
+export async function getPostEvents(postId: string): Promise<PostEvent[]> {
+  const eventsRef = collection(db, POSTS_COLLECTION, postId, 'postEvents');
+  const q = query(eventsRef, orderBy('createdAt', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PostEvent, 'id'>) }));
 }
 
 /**
