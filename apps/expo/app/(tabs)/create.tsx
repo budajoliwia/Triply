@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { router } from 'expo-router';
@@ -24,6 +24,32 @@ export default function CreateScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [redirectSeconds, setRedirectSeconds] = useState(2);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!success) return;
+    setRedirectSeconds(2);
+
+    const tick = () => {
+      setRedirectSeconds((s) => {
+        const next = s - 1;
+        if (next <= 0) {
+          router.replace('/(tabs)/feed');
+          return 0;
+        }
+        return next;
+      });
+      redirectTimerRef.current = setTimeout(tick, 1000);
+    };
+
+    redirectTimerRef.current = setTimeout(tick, 1000);
+
+    return () => {
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    };
+  }, [success]);
 
   const pickImage = async () => {
     try {
@@ -69,18 +95,13 @@ export default function CreateScreen() {
         imageUri: image,
       });
       setSuccess(true);
-      setTimeout(() => {
-        setContent('');
-        setImage(null);
-        setSuccess(false);
-        router.push('/(tabs)/feed');
-      }, 1500);
+      setContent('');
+      setImage(null);
     } catch (error) {
       console.error(error);
       Alert.alert('Błąd', 'Nie udało się dodać posta.');
-      setLoading(false);
     } finally {
-      if (!success) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -88,20 +109,42 @@ export default function CreateScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centerContent]}>
         <Ionicons name="checkmark-circle" size={80} color="#4CD964" />
-        <Text style={styles.successText}>Post przesłany do moderacji!</Text>
-        <Text style={styles.redirectText}>Przekierowanie...</Text>
+        <Text style={styles.successText}>Wysłano do moderacji</Text>
+        <Text style={styles.redirectText}>Twój post jest widoczny w profilu w zakładce „Oczekujące”.</Text>
+        <View style={styles.successActionsRow}>
+          <TouchableOpacity
+            style={[styles.secondaryButton]}
+            onPress={() => router.replace('/(tabs)/my')}
+          >
+            <Text style={styles.secondaryButtonText}>Mój profil</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryButton]}
+            onPress={() => router.replace('/(tabs)/feed')}
+          >
+            <Text style={styles.primaryButtonText}>Przejdź do feed</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.redirectRow}>
+          <ActivityIndicator size="small" color="#007AFF" />
+          <Text style={styles.redirectCountdownText}>
+            Przekierowanie do feed za {redirectSeconds}s…
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
+
+  const canPublish = !!user && (!!content.trim() || !!image) && !loading;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Nowy wpis</Text>
         <TouchableOpacity
-          style={[styles.postButton, loading && styles.disabledButton]}
+          style={[styles.postButton, !canPublish && styles.disabledButton]}
           onPress={handleCreatePost}
-          disabled={loading}
+          disabled={!canPublish}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
@@ -127,13 +170,13 @@ export default function CreateScreen() {
         {image && (
           <View style={styles.imagePreviewContainer}>
             <Image source={{ uri: image }} style={styles.imagePreview} />
-            <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImage(null)}>
+            <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImage(null)} disabled={loading}>
               <Ionicons name="close-circle" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
 
-        <TouchableOpacity style={styles.addPhotoBtn} onPress={pickImage}>
+        <TouchableOpacity style={[styles.addPhotoBtn, loading && styles.addPhotoBtnDisabled]} onPress={pickImage} disabled={loading}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
           <Text style={styles.addPhotoText}>Dodaj zdjęcie</Text>
         </TouchableOpacity>
@@ -239,5 +282,49 @@ const styles = StyleSheet.create({
   redirectText: {
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  successActionsRow: {
+    flexDirection: 'row',
+    marginTop: 18,
+    gap: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    minWidth: 130,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    minWidth: 110,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#333',
+    fontWeight: '700',
+  },
+  redirectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  redirectCountdownText: {
+    marginLeft: 8,
+    color: '#666',
+    fontSize: 13,
+  },
+  addPhotoBtnDisabled: {
+    opacity: 0.6,
   },
 });

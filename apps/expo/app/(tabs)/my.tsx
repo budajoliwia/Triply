@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -25,7 +26,7 @@ const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const ITEM_SIZE = width / COLUMN_COUNT;
 
-type ProfilePostFilter = 'approved' | 'pending';
+type ProfilePostFilter = 'approved' | 'pending' | 'rejected';
 
 export default function MyProfileScreen() {
   const { user, isAdmin } = useAuth();
@@ -163,24 +164,51 @@ export default function MyProfileScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: Post }) => (
-    <View style={styles.gridItem}>
-      {item.photoUrl ? (
-        <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
-      ) : (
-        <View style={[styles.gridImage, styles.placeholderContainer]}>
-          <Text style={styles.postTextContent} numberOfLines={4}>
-            {item.text}
-          </Text>
-        </View>
-      )}
-      {item.status === 'pending' && (
-        <View style={styles.pendingBadge}>
-          <Text style={styles.pendingText}>Oczekuje</Text>
-        </View>
-      )}
-    </View>
-  );
+  const renderItem = ({ item }: { item: Post }) => {
+    const showRejectedReason = item.status === 'rejected' && typeof item.rejectionReason === 'string' && !!item.rejectionReason.trim();
+
+    return (
+      <TouchableOpacity
+        style={styles.gridItem}
+        onPress={() => router.push(`/post/${item.id}`)}
+        onLongPress={() => {
+          if (!showRejectedReason) return;
+          Alert.alert('Powód odrzucenia', item.rejectionReason!.trim());
+        }}
+        delayLongPress={350}
+      >
+        {item.photoUrl ? (
+          <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
+        ) : (
+          <View style={[styles.gridImage, styles.placeholderContainer]}>
+            <Text style={styles.postTextContent} numberOfLines={4}>
+              {item.text}
+            </Text>
+          </View>
+        )}
+
+        {item.status === 'pending' && (
+          <View style={styles.pendingBadge}>
+            <Text style={styles.pendingText}>Oczekuje</Text>
+          </View>
+        )}
+
+        {item.status === 'rejected' && (
+          <View style={styles.rejectedBadge}>
+            <Text style={styles.rejectedText}>Odrzucone</Text>
+          </View>
+        )}
+
+        {showRejectedReason && (
+          <View style={styles.reasonOverlay}>
+            <Text style={styles.reasonText} numberOfLines={2}>
+              Powód: {item.rejectionReason!.trim()}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderHeader = () => (
     <View style={styles.profileHeader}>
@@ -209,6 +237,14 @@ export default function MyProfileScreen() {
         >
           <Text style={[styles.filterText, postFilter === 'pending' && styles.filterTextActive]}>
             Oczekujące
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterPill, postFilter === 'rejected' && styles.filterPillActive]}
+          onPress={() => setPostFilter('rejected')}
+        >
+          <Text style={[styles.filterText, postFilter === 'rejected' && styles.filterTextActive]}>
+            Odrzucone
           </Text>
         </TouchableOpacity>
       </View>
@@ -248,7 +284,9 @@ export default function MyProfileScreen() {
   const emptyText =
     postFilter === 'approved'
       ? 'Nie masz jeszcze żadnych zatwierdzonych postów.'
-      : 'Brak postów oczekujących na zatwierdzenie.';
+      : postFilter === 'pending'
+        ? 'Brak postów oczekujących na zatwierdzenie.'
+        : 'Brak odrzuconych postów.';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -413,6 +451,35 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  rejectedBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(255, 59, 48, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  rejectedText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  reasonOverlay: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+  },
+  reasonText: {
+    color: '#fff',
+    fontSize: 10,
+    lineHeight: 13,
   },
   emptyContainer: {
     alignItems: 'center',

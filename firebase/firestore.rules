@@ -16,6 +16,20 @@ service cloud.firestore {
       return isAuthenticated()
         && get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid;
     }
+
+    // Same visibility as a post document:
+    // - approved: any authenticated user can read
+    // - pending/draft/rejected: only post author or admin
+    function canReadPostById(postId) {
+      return exists(/databases/$(database)/documents/posts/$(postId))
+        && (
+          get(/databases/$(database)/documents/posts/$(postId)).data.status == 'approved'
+          || (
+            isAuthenticated()
+            && (get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid || isAdmin())
+          )
+        );
+    }
     
     function isAdmin() {
       // Safe read (admin role check)
@@ -45,34 +59,55 @@ service cloud.firestore {
             && request.resource.data.avatarPath == ('avatars/' + userId + '.jpg'));
     }
 
+    function isValidUserCreate(userId) {
+      // Prevent self-admin and enforce safe defaults at registration time.
+      return request.resource.data.keys().hasOnly([
+          'email',
+          'username',
+          'usernameLower',
+          'role',
+          'dailyPostLimit',
+          'usedToday',
+          'lastUsageDate',
+          'followersCount',
+          'followingCount',
+          'createdAt',
+          // Optional profile fields
+          'bio',
+          'avatarPath'
+        ])
+        && request.resource.data.role == 'user'
+        && request.resource.data.dailyPostLimit == 5
+        && request.resource.data.usedToday == 0
+        && request.resource.data.followersCount == 0
+        && request.resource.data.followingCount == 0
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.username is string
+        && request.resource.data.username.size() >= 3
+        && request.resource.data.username.size() <= 30
+        && request.resource.data.usernameLower is string
+        && request.resource.data.usernameLower.size() >= 3
+        && request.resource.data.usernameLower.size() <= 30
+        && request.resource.data.lastUsageDate is string
+        && request.resource.data.lastUsageDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && isValidBio()
+        && isValidAvatarPath(userId);
+    }
+
     function onlyProfileFieldsChanged() {
       // Allow editing ONLY user-facing profile fields from the client.
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bio', 'avatarPath']);
     }
     
-    // Allow ONLY commentCount +/- 1 (and updatedAt change) while all other fields stay identical.
-    function isCommentCountUpdate(resource, requestResource) {
-      let currentCount = resource.data.get('commentCount', 0);
-      
-      return requestResource.data.authorId == resource.data.authorId
-             && requestResource.data.text == resource.data.text
-             && requestResource.data.tags == resource.data.tags
-             && requestResource.data.photo == resource.data.photo
-             && requestResource.data.status == resource.data.status
-             && requestResource.data.likeCount == resource.data.get('likeCount', 0)
-             && requestResource.data.createdAt == resource.data.createdAt
-             && (
-               requestResource.data.commentCount == currentCount + 1 ||
-               requestResource.data.commentCount == currentCount - 1
-             );
-      // updatedAt may differ; we intentionally do NOT compare it here.
-    }
-
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if true; 
       // Create user doc (registration)
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && isValidUserCreate(userId);
       // Production hardening:
       // - ONLY the owner may update their own profile fields (bio/avatarPath)
       // - clients cannot modify role, limits, counters, etc. (Cloud Functions bypass rules)
@@ -126,18 +161,16 @@ service cloud.firestore {
                         (
                           // Author updates (same as before, counters immutable here)
                           isAuthor(resource) 
-                          // Prevent setting restricted statuses
-                          && !(request.resource.data.status in ['approved', 'rejected'])
+                          // Prevent client from editing approved/rejected posts or setting restricted statuses
+                          && (resource.data.status in ['draft', 'pending'])
+                          && (request.resource.data.status in ['draft', 'pending'])
                           // Prevent changing system fields
                           && request.resource.data.authorId == resource.data.authorId
                           // CRITICAL: Prevent client from changing counters directly
                           && request.resource.data.likeCount == resource.data.likeCount
                           && request.resource.data.commentCount == resource.data.commentCount
-                        )
-                        ||
-                        (
-                          // Comment counter bump (allow any authenticated user)
-                          isCommentCountUpdate(resource, request.resource)
+                          // Prevent changing creation time
+                          && request.resource.data.createdAt == resource.data.createdAt
                         )
                       )
                     );
@@ -149,21 +182,36 @@ service cloud.firestore {
       // --- Likes Subcollection ---
       // posts/{postId}/likes/{userId}
       match /likes/{userId} {
-        allow read: if isAuthenticated();
+        allow read: if isAuthenticated() && canReadPostById(postId);
         // Create: Only allow if document ID matches authenticated User ID
-        allow create: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated()
+                      && canReadPostById(postId)
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasOnly(['createdAt'])
+                      && request.resource.data.createdAt is timestamp;
         // Delete: Only allow if document ID matches authenticated User ID
-        allow delete: if isAuthenticated() && request.auth.uid == userId;
+        allow delete: if isAuthenticated() && canReadPostById(postId) && request.auth.uid == userId;
+        allow update: if false;
       }
 
       // --- Comments Subcollection ---
       // posts/{postId}/comments/{commentId}
       match /comments/{commentId} {
-        allow read: if isAuthenticated();
+        allow read: if isAuthenticated() && canReadPostById(postId);
         // Create: Allow any authenticated user to comment
-        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+        allow create: if isAuthenticated()
+                      && canReadPostById(postId)
+                      && request.resource.data.keys().hasOnly(['authorId', 'text', 'createdAt'])
+                      && request.resource.data.authorId == request.auth.uid
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 500
+                      && request.resource.data.createdAt is timestamp;
         // Delete: Allow author or admin to delete
-        allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+        allow delete: if isAuthenticated()
+                      && canReadPostById(postId)
+                      && (resource.data.authorId == request.auth.uid || isAdmin());
+        allow update: if false;
       }
 
       // --- Post Events Subcollection (audit log) ---

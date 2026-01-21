@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -51,6 +52,7 @@ export default function PostDetailsScreen() {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [likeUpdating, setLikeUpdating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -92,6 +94,18 @@ export default function PostDetailsScreen() {
   useEffect(() => {
     refreshComments();
   }, [postId]);
+
+  const onRefresh = async () => {
+    if (!postId) return;
+    setRefreshing(true);
+    try {
+      const p = await getPostById(postId);
+      setPost(p);
+      await refreshComments();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (!postId || !isAdmin) return;
@@ -225,6 +239,7 @@ export default function PostDetailsScreen() {
         data={comments}
         keyExtractor={(c) => c.id}
         contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <View style={styles.postCard}>
             <TouchableOpacity
@@ -242,6 +257,39 @@ export default function PostDetailsScreen() {
                 </Text>
               </View>
             </TouchableOpacity>
+
+            {(isAdmin || user?.uid === post.authorId) && post.status !== 'approved' && (
+              <View style={styles.statusRow}>
+                <View
+                  style={[
+                    styles.statusPill,
+                    post.status === 'pending' && styles.statusPending,
+                    post.status === 'rejected' && styles.statusRejected,
+                    post.status === 'draft' && styles.statusDraft,
+                  ]}
+                >
+                  <Text style={styles.statusText}>
+                    {post.status === 'pending'
+                      ? 'Oczekuje'
+                      : post.status === 'rejected'
+                        ? 'Odrzucone'
+                        : post.status === 'draft'
+                          ? 'Szkic'
+                          : post.status}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {(isAdmin || user?.uid === post.authorId) &&
+              post.status === 'rejected' &&
+              typeof post.rejectionReason === 'string' &&
+              !!post.rejectionReason.trim() && (
+                <View style={styles.rejectionBox}>
+                  <Text style={styles.rejectionTitle}>Powód odrzucenia</Text>
+                  <Text style={styles.rejectionBody}>{post.rejectionReason.trim()}</Text>
+                </View>
+              )}
 
             <Text style={styles.content}>{post.text}</Text>
             {post.photoUrl && (
@@ -386,6 +434,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#eaeaea',
+  },
+  statusPending: {
+    backgroundColor: 'rgba(255, 149, 0, 0.18)',
+  },
+  statusRejected: {
+    backgroundColor: 'rgba(255, 59, 48, 0.18)',
+  },
+  statusDraft: {
+    backgroundColor: 'rgba(142, 142, 147, 0.18)',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#333',
+  },
+  rejectionBox: {
+    backgroundColor: '#fff5f5',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.25)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  rejectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#c62828',
+    marginBottom: 4,
+  },
+  rejectionBody: {
+    fontSize: 13,
+    color: '#333',
+    lineHeight: 18,
   },
   username: {
     fontWeight: 'bold',

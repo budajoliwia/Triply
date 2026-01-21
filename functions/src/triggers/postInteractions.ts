@@ -64,41 +64,60 @@ export const onLikeDeleted = onDocumentDeleted('posts/{postId}/likes/{userId}', 
 
 // --- Comments Counters ---
 
-// DISABLED: Client updates counter transactionally for immediate feedback.
-// Having both client update + Cloud Function causes double counting.
+export const onCommentCreated = onDocumentCreated('posts/{postId}/comments/{commentId}', async (event) => {
+  const postId = event.params.postId;
+  const commenterUid = event.data?.data()?.authorId as string | undefined;
+  const postRef = db.collection('posts').doc(postId);
 
-/*
-export const onCommentCreated = onDocumentCreated(
-  'posts/{postId}/comments/{commentId}',
-  async (event) => {
-    const postId = event.params.postId;
-    const postRef = db.collection('posts').doc(postId);
+  try {
+    await postRef.update({
+      commentCount: FieldValue.increment(1),
+    });
+    logger.info(`Incremented commentCount for post ${postId}`);
 
+    // Optional notification for post author (unless self-comment)
     try {
-      await postRef.update({
-        commentCount: FieldValue.increment(1),
-      });
-      logger.info(`Incremented commentCount for post ${postId}`);
-    } catch (error) {
-      logger.error(`Error incrementing commentCount for post ${postId}`, error);
-    }
-  },
-);
+      const postSnap = await postRef.get();
+      if (!postSnap.exists) {
+        logger.warn('[notifications][comment] missing_post', { postId, commenterUid, eventId: event.id });
+        return;
+      }
+      const postData = postSnap.data() as { authorId?: unknown };
+      const authorId = typeof postData.authorId === 'string' ? postData.authorId : null;
+      if (!authorId || !commenterUid || authorId === commenterUid) return;
 
-export const onCommentDeleted = onDocumentDeleted(
-  'posts/{postId}/comments/{commentId}',
-  async (event) => {
-    const postId = event.params.postId;
-    const postRef = db.collection('posts').doc(postId);
-
-    try {
-      await postRef.update({
-        commentCount: FieldValue.increment(-1),
+      await createNotificationIfNotDuplicated(db, {
+        targetUserId: authorId,
+        actorId: commenterUid,
+        type: 'comment',
+        postId,
+        eventId: event.id,
       });
-      logger.info(`Decremented commentCount for post ${postId}`);
-    } catch (error) {
-      logger.error(`Error decrementing commentCount for post ${postId}`, error);
+    } catch (e) {
+      logger.error('[notifications][comment] failed', { postId, commenterUid, eventId: event.id, error: e });
+      // do not throw: commentCount increment already done, and we prefer not retrying just for notification.
     }
-  },
-);
-*/
+  } catch (error) {
+    logger.error(`Error incrementing commentCount for post ${postId}`, error);
+  }
+});
+
+export const onCommentDeleted = onDocumentDeleted('posts/{postId}/comments/{commentId}', async (event) => {
+  const postId = event.params.postId;
+  const postRef = db.collection('posts').doc(postId);
+
+  try {
+    await db.runTransaction(async (t) => {
+      const postSnap = await t.get(postRef);
+      if (!postSnap.exists) return;
+
+      const current = typeof postSnap.data()?.commentCount === 'number' ? postSnap.data()!.commentCount : 0;
+      const next = Math.max(0, current - 1);
+      t.update(postRef, { commentCount: next });
+    });
+
+    logger.info(`Decremented commentCount for post ${postId}`);
+  } catch (error) {
+    logger.error(`Error decrementing commentCount for post ${postId}`, error);
+  }
+});

@@ -10,6 +10,7 @@ import {
   deleteDoc,
   getDoc,
   addDoc,
+  deleteField,
   serverTimestamp,
   Timestamp,
   runTransaction,
@@ -305,6 +306,7 @@ export async function approvePost(postId: string): Promise<void> {
     const batch = writeBatch(db);
     batch.update(postRef, {
       status: 'approved',
+      rejectionReason: deleteField(),
       updatedAt: serverTimestamp(),
     });
 
@@ -325,14 +327,18 @@ export async function approvePost(postId: string): Promise<void> {
 /**
  * Reject a pending post.
  */
-export async function rejectPost(postId: string): Promise<void> {
+export async function rejectPost(postId: string, reason?: string): Promise<void> {
   try {
     const postRef = doc(db, POSTS_COLLECTION, postId);
     const actorId = auth.currentUser?.uid ?? 'system';
 
+    const reasonTrimmed = typeof reason === 'string' ? reason.trim() : '';
+    const reasonValue = reasonTrimmed ? reasonTrimmed.slice(0, 240) : null;
+
     const batch = writeBatch(db);
     batch.update(postRef, {
       status: 'rejected',
+      rejectionReason: reasonValue ? reasonValue : deleteField(),
       updatedAt: serverTimestamp(),
     });
 
@@ -396,18 +402,10 @@ export async function addComment(postId: string, userId: string, text: string): 
         throw createPostNotFoundError(postId);
       }
 
-      const postData = postSnap.data() as Partial<PostDoc<Timestamp>>;
-      const currentCount = typeof postData.commentCount === 'number' ? postData.commentCount : 0;
-
       tx.set(newCommentRef, {
         authorId: userId,
         text,
         createdAt: serverTimestamp(),
-      });
-
-      tx.update(postRef, {
-        commentCount: currentCount + 1,
-        updatedAt: serverTimestamp(),
       });
     });
   } catch (error) {
@@ -431,20 +429,12 @@ export async function deleteComment(postId: string, commentId: string): Promise<
         throw createPostNotFoundError(postId);
       }
 
-      // If the comment is already gone, don't decrement the counter.
+      // If the comment is already gone, do nothing.
       if (!commentSnap.exists()) {
         return;
       }
 
-      const postData = postSnap.data() as Partial<PostDoc<Timestamp>>;
-      const currentCount = typeof postData.commentCount === 'number' ? postData.commentCount : 0;
-      const nextCount = Math.max(0, currentCount - 1);
-
       tx.delete(commentRef);
-      tx.update(postRef, {
-        commentCount: nextCount,
-        updatedAt: serverTimestamp(),
-      });
     });
   } catch (error) {
     console.error('Error deleting comment:', error);

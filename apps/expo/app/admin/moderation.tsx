@@ -8,6 +8,10 @@ import {
   Alert,
   SafeAreaView,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { getPosts, approvePost, rejectPost, Post } from '../../src/services/posts';
@@ -15,6 +19,10 @@ import { getPosts, approvePost, rejectPost, Post } from '../../src/services/post
 export default function ModerationScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectingPostId, setRejectingPostId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
   const fetchPosts = async () => {
     setLoading(true);
@@ -43,13 +51,33 @@ export default function ModerationScreen() {
     }
   };
 
-  const handleReject = async (id: string) => {
+  const openRejectModal = (id: string) => {
+    setRejectingPostId(id);
+    setRejectReason('');
+    setRejectModalVisible(true);
+  };
+
+  const closeRejectModal = () => {
+    if (rejectSubmitting) return;
+    setRejectModalVisible(false);
+    setRejectingPostId(null);
+    setRejectReason('');
+  };
+
+  const confirmReject = async () => {
+    if (!rejectingPostId) return;
+    if (rejectSubmitting) return;
+    setRejectSubmitting(true);
     try {
-      await rejectPost(id);
+      await rejectPost(rejectingPostId, rejectReason);
       Alert.alert('Sukces', 'Post odrzucony.');
+      closeRejectModal();
       fetchPosts(); // Refresh list
     } catch (error) {
+      console.error(error);
       Alert.alert('Błąd', 'Nie udało się odrzucić posta.');
+    } finally {
+      setRejectSubmitting(false);
     }
   };
 
@@ -63,7 +91,7 @@ export default function ModerationScreen() {
       <View style={styles.actions}>
         <TouchableOpacity
           style={[styles.button, styles.rejectButton]}
-          onPress={() => handleReject(item.id)}
+          onPress={() => openRejectModal(item.id)}
         >
           <Text style={styles.buttonText}>Odrzuć</Text>
         </TouchableOpacity>
@@ -100,6 +128,36 @@ export default function ModerationScreen() {
           }
         />
       )}
+
+      <Modal visible={rejectModalVisible} transparent animationType="fade" onRequestClose={closeRejectModal}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Odrzuć post</Text>
+            <Text style={styles.modalSubtitle}>Opcjonalnie podaj powód (autor go zobaczy).</Text>
+            <TextInput
+              style={styles.reasonInput}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="Np. naruszenie zasad, spam, treść nie na temat…"
+              multiline
+              maxLength={240}
+              editable={!rejectSubmitting}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalCancel]} onPress={closeRejectModal} disabled={rejectSubmitting}>
+                <Text style={styles.modalCancelText}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.modalReject]} onPress={confirmReject} disabled={rejectSubmitting}>
+                {rejectSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalRejectText}>Odrzuć</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -182,5 +240,67 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 30,
     color: '#888',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111',
+  },
+  modalSubtitle: {
+    marginTop: 6,
+    color: '#666',
+    fontSize: 13,
+  },
+  reasonInput: {
+    marginTop: 12,
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: '#e6e6e6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fafafa',
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 14,
+    gap: 10,
+  },
+  modalButton: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  modalCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  modalCancelText: {
+    color: '#333',
+    fontWeight: '700',
+  },
+  modalReject: {
+    backgroundColor: '#ff4444',
+  },
+  modalRejectText: {
+    color: '#fff',
+    fontWeight: '800',
   },
 });

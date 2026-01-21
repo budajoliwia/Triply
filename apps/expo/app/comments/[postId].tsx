@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
+  RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -25,6 +26,7 @@ export default function CommentsScreen() {
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [inputText, setInputText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -45,12 +47,23 @@ export default function CommentsScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    if (!postId) return;
+    setRefreshing(true);
+    try {
+      await fetchComments();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleSend = async () => {
     if (!user) {
       Alert.alert('Zaloguj się', 'Musisz być zalogowany, aby dodać komentarz.');
       return;
     }
     if (!inputText.trim()) return;
+    if (submitting) return;
 
     setSubmitting(true);
     try {
@@ -130,19 +143,20 @@ export default function CommentsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          data={comments}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
+      <FlatList
+        data={comments}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+          ) : (
             <Text style={styles.emptyText}>Brak komentarzy. Bądź pierwszy!</Text>
-          }
-        />
-      )}
+          )
+        }
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -151,15 +165,16 @@ export default function CommentsScreen() {
       >
         <TextInput
           style={styles.input}
-          placeholder="Napisz komentarz..."
+          placeholder={user ? 'Napisz komentarz...' : 'Zaloguj się, aby komentować...'}
           value={inputText}
           onChangeText={setInputText}
           multiline
+          editable={!!user && !submitting}
         />
         <TouchableOpacity 
           style={[styles.sendButton, (!inputText.trim() || submitting) && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!inputText.trim() || submitting}
+          disabled={!user || !inputText.trim() || submitting}
         >
           {submitting ? (
             <ActivityIndicator size="small" color="#fff" />
