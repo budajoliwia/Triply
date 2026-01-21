@@ -11,10 +11,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/auth';
 import { createPost } from '../../src/services/posts';
 
@@ -24,32 +24,47 @@ export default function CreateScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [redirectSeconds, setRedirectSeconds] = useState(2);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRedirectTimer = useCallback(() => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    redirectTimerRef.current = null;
+  }, []);
+
+  const navigateAfterSuccess = useCallback(
+    (path: '/(tabs)/feed' | '/(tabs)/my') => {
+      clearRedirectTimer();
+      setSuccess(false);
+      setLoading(false);
+      router.replace(path);
+    },
+    [clearRedirectTimer],
+  );
 
   useEffect(() => {
     if (!success) return;
-    setRedirectSeconds(2);
-
-    const tick = () => {
-      setRedirectSeconds((s) => {
-        const next = s - 1;
-        if (next <= 0) {
-          router.replace('/(tabs)/feed');
-          return 0;
-        }
-        return next;
-      });
-      redirectTimerRef.current = setTimeout(tick, 1000);
-    };
-
-    redirectTimerRef.current = setTimeout(tick, 1000);
+    // Keep it simple: show a success message briefly, then go back to feed.
+    // IMPORTANT: tabs screens stay mounted; clear success/timer to avoid
+    // redirecting the user while they're on another tab.
+    redirectTimerRef.current = setTimeout(() => {
+      navigateAfterSuccess('/(tabs)/feed');
+    }, 900);
 
     return () => {
-      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
-      redirectTimerRef.current = null;
+      clearRedirectTimer();
     };
-  }, [success]);
+  }, [success, clearRedirectTimer, navigateAfterSuccess]);
+
+  // If user leaves this tab while success screen is shown, cancel the timer
+  // to prevent surprise redirects.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        clearRedirectTimer();
+        setSuccess(false);
+      };
+    }, [clearRedirectTimer]),
+  );
 
   const pickImage = async () => {
     try {
@@ -109,28 +124,7 @@ export default function CreateScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centerContent]}>
         <Ionicons name="checkmark-circle" size={80} color="#4CD964" />
-        <Text style={styles.successText}>Wysłano do moderacji</Text>
-        <Text style={styles.redirectText}>Twój post jest widoczny w profilu w zakładce „Oczekujące”.</Text>
-        <View style={styles.successActionsRow}>
-          <TouchableOpacity
-            style={[styles.secondaryButton]}
-            onPress={() => router.replace('/(tabs)/my')}
-          >
-            <Text style={styles.secondaryButtonText}>Mój profil</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryButton]}
-            onPress={() => router.replace('/(tabs)/feed')}
-          >
-            <Text style={styles.primaryButtonText}>Przejdź do feed</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.redirectRow}>
-          <ActivityIndicator size="small" color="#007AFF" />
-          <Text style={styles.redirectCountdownText}>
-            Przekierowanie do feed za {redirectSeconds}s…
-          </Text>
-        </View>
+        <Text style={styles.successText}>Sukces! Post wysłany do moderacji.</Text>
       </SafeAreaView>
     );
   }
@@ -284,45 +278,6 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 8,
-  },
-  successActionsRow: {
-    flexDirection: 'row',
-    marginTop: 18,
-    gap: 10,
-  },
-  primaryButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    minWidth: 130,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    minWidth: 110,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#333',
-    fontWeight: '700',
-  },
-  redirectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  redirectCountdownText: {
-    marginLeft: 8,
-    color: '#666',
-    fontSize: 13,
   },
   addPhotoBtnDisabled: {
     opacity: 0.6,
