@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { setupEmulators } from '../src/firebase/client';
 import { AuthProvider, useAuth } from '../src/context/auth';
+import { colors } from '../src/theme';
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
@@ -26,7 +27,7 @@ function RootLayoutNav() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -51,5 +52,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.bg,
   },
 });

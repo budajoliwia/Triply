@@ -28,6 +28,8 @@ import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/ut
 import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
+import { Button } from '../../src/components/Button';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -159,7 +161,7 @@ export default function PublicProfileScreen() {
         <Image source={{ uri: item.photoUrl }} style={styles.gridImage} resizeMode="cover" />
       ) : (
         <View style={[styles.gridImage, styles.placeholderImage]}>
-          <Ionicons name="image-outline" size={32} color="#ccc" />
+          <Ionicons name="image-outline" size={30} color={colors.textTertiary} />
         </View>
       )}
     </View>
@@ -192,23 +194,14 @@ export default function PublicProfileScreen() {
         </View>
 
         {user && user.uid !== userId && (
-          <TouchableOpacity
-            style={[
-              styles.followButton,
-              following && styles.followingButton,
-              actionLoading && styles.disabledButton,
-            ]}
+          <Button
+            label={following ? 'Obserwujesz' : 'Obserwuj'}
             onPress={handleToggleFollow}
+            loading={actionLoading}
             disabled={actionLoading}
-          >
-            {actionLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={[styles.followButtonText, following && styles.followingButtonText]}>
-                {following ? 'Obserwujesz' : 'Obserwuj'}
-              </Text>
-            )}
-          </TouchableOpacity>
+            variant={following ? 'secondary' : 'primary'}
+            style={{ minWidth: 140 }}
+          />
         )}
       </View>
     );
@@ -296,7 +289,7 @@ export default function PublicProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   loadingContainer: {
     flex: 1,
@@ -305,87 +298,66 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    padding: space['2xl'],
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
   },
   name: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    ...typography.titleXL,
+    marginBottom: space.xs,
   },
   bio: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: space.xl,
     textAlign: 'center',
   },
   bioPlaceholder: {
-    color: '#999',
+    color: colors.textTertiary,
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    marginBottom: 20,
+    marginBottom: space.xl,
   },
   statItem: {
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...typography.titleLG,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  followButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-    borderRadius: 20,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  followingButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  followButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  followingButtonText: {
-    color: '#007AFF',
-  },
-  disabledButton: {
-    opacity: 0.7,
+    ...typography.micro,
+    color: colors.textSecondary,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: space['2xl'],
   },
   gridItem: {
     width: ITEM_SIZE,
     height: ITEM_SIZE,
-    padding: 1,
+    padding: 2,
   },
   gridImage: {
     flex: 1,
-    backgroundColor: '#eee',
+    backgroundColor: colors.skeleton,
+    borderRadius: radius.md,
   },
   placeholderImage: {
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   emptyContainer: {
     alignItems: 'center',
     marginTop: 50,
   },
   emptyText: {
-    color: '#888',
-    fontSize: 16,
+    ...typography.body,
+    color: colors.textTertiary,
   },
 });
 

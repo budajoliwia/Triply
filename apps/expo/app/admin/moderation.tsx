@@ -28,6 +28,9 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { formatTimestampDate } from '../../src/utils/time';
+import { Button } from '../../src/components/Button';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, shadow, space, typography } from '../../src/theme';
 
 export default function ModerationScreen() {
   const { isAdmin } = useAuth();
@@ -194,7 +197,7 @@ export default function ModerationScreen() {
       {loading ? (
         <View style={styles.list}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <View key={i} style={styles.postContainer}>
+            <SurfaceCard key={i} style={styles.postContainer}>
               <SkeletonBlock height={14} width={180} radius={7} />
               <View style={{ height: 10 }} />
               <SkeletonBlock height={16} width={'92%'} radius={8} />
@@ -205,7 +208,7 @@ export default function ModerationScreen() {
                 <SkeletonBlock height={36} width={120} radius={8} />
                 <SkeletonBlock height={36} width={120} radius={8} />
               </View>
-            </View>
+            </SurfaceCard>
           ))}
         </View>
       ) : error ? (
@@ -252,7 +255,7 @@ export default function ModerationScreen() {
             const busy = actionPostId === item.postId || rejectSubmitting;
             const dateLabel = formatTimestampDate(item.createdAt, 'Teraz');
             return (
-              <View style={styles.postContainer}>
+              <SurfaceCard style={styles.postContainer}>
                 <View style={styles.rowTop}>
                   <Text style={styles.cardTitle}>Do ręcznej moderacji</Text>
                   <Text style={styles.cardSub}>{dateLabel}</Text>
@@ -284,20 +287,14 @@ export default function ModerationScreen() {
                 )}
 
                 <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.button, styles.rejectButton, busy && styles.disabledButton]}
+                  <Button
+                    label="Reject"
+                    variant="destructive"
                     onPress={() => openRejectModal(item)}
                     disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Reject</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.button, styles.approveButton, busy && styles.disabledButton]}
-                    onPress={() => handleApprove(item)}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Approve</Text>
-                  </TouchableOpacity>
+                    style={{ flex: 1 }}
+                  />
+                  <Button label="Approve" variant="primary" onPress={() => handleApprove(item)} disabled={busy} style={{ flex: 1 }} />
                 </View>
 
                 <View style={styles.bottomRow}>
@@ -314,7 +311,7 @@ export default function ModerationScreen() {
                     <Text style={styles.linkMuted}>Oznacz jako przeczytane</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </SurfaceCard>
             );
           }}
         />
@@ -335,16 +332,8 @@ export default function ModerationScreen() {
               editable={!rejectSubmitting}
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.modalCancel]} onPress={closeRejectModal} disabled={rejectSubmitting}>
-                <Text style={styles.modalCancelText}>Anuluj</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.modalReject]} onPress={confirmReject} disabled={rejectSubmitting}>
-                {rejectSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.modalRejectText}>Odrzuć</Text>
-                )}
-              </TouchableOpacity>
+              <Button label="Anuluj" variant="secondary" onPress={closeRejectModal} disabled={rejectSubmitting} />
+              <Button label="Odrzuć" variant="destructive" onPress={confirmReject} loading={rejectSubmitting} disabled={rejectSubmitting} />
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -356,13 +345,14 @@ export default function ModerationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.bg,
   },
   header: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    backgroundColor: colors.bg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -373,30 +363,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    ...typography.titleXL,
   },
   refreshText: {
-    color: '#007AFF',
+    ...typography.meta,
+    color: colors.primary,
   },
   inboxBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#f0f0f0',
+    paddingHorizontal: space.md,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   inboxText: {
-    color: '#333',
-    fontWeight: '700',
+    ...typography.meta,
+    color: colors.text,
   },
   badge: {
     marginLeft: 8,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#ff3b30',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -407,7 +399,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   list: {
-    padding: 10,
+    padding: space.lg,
   },
   rowTop: {
     flexDirection: 'row',
@@ -416,39 +408,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#111',
+    ...typography.titleMD,
   },
   cardSub: {
-    fontSize: 12,
-    color: '#888',
+    ...typography.meta,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   aiBox: {
     marginTop: 10,
     marginBottom: 10,
-    backgroundColor: 'rgba(255, 149, 0, 0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 149, 0, 0.25)',
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: colors.warningSoft,
+    borderWidth: hairline,
+    borderColor: 'rgba(154, 106, 31, 0.22)',
+    borderRadius: radius.md,
+    padding: space.md,
   },
   aiTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#6b3f00',
+    ...typography.meta,
+    color: colors.warning,
     marginBottom: 6,
   },
   aiText: {
-    fontSize: 12,
-    color: '#333',
+    ...typography.meta,
+    color: colors.text,
     lineHeight: 17,
     marginBottom: 3,
   },
   previewText: {
-    fontSize: 14,
-    color: '#222',
+    ...typography.body,
+    color: colors.text,
     lineHeight: 20,
   },
   bottomRow: {
@@ -458,76 +447,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   link: {
-    color: '#007AFF',
-    fontWeight: '700',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.primary,
   },
   linkMuted: {
-    color: '#666',
-    fontWeight: '700',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.textSecondary,
   },
   disabledButton: {
     opacity: 0.6,
   },
   postContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  authorId: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 5,
-  },
-  content: {
-    fontSize: 16,
-    marginBottom: 10,
+    padding: space.lg,
+    marginBottom: space.lg,
   },
   postImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
+    borderRadius: radius.md,
     marginBottom: 10,
-    backgroundColor: '#eee',
+    backgroundColor: colors.skeleton,
     resizeMode: 'cover',
   },
   actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 10,
     marginTop: 10,
-  },
-  button: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  approveButton: {
-    backgroundColor: '#4CAF50',
-  },
-  rejectButton: {
-    backgroundColor: '#ff4444',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 30,
-    color: '#888',
+    color: colors.textSecondary,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -535,56 +489,36 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...shadow.floating,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111',
+    ...typography.titleLG,
   },
   modalSubtitle: {
     marginTop: 6,
-    color: '#666',
-    fontSize: 13,
+    ...typography.body,
+    color: colors.textSecondary,
   },
   reasonInput: {
     marginTop: 12,
     minHeight: 90,
-    borderWidth: 1,
-    borderColor: '#e6e6e6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    backgroundColor: colors.surface,
+    color: colors.text,
     textAlignVertical: 'top',
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     marginTop: 14,
     gap: 10,
-  },
-  modalButton: {
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minWidth: 96,
-    alignItems: 'center',
-  },
-  modalCancel: {
-    backgroundColor: '#f0f0f0',
-  },
-  modalCancelText: {
-    color: '#333',
-    fontWeight: '700',
-  },
-  modalReject: {
-    backgroundColor: '#ff4444',
-  },
-  modalRejectText: {
-    color: '#fff',
-    fontWeight: '800',
   },
 });

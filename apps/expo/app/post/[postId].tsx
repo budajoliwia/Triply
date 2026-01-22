@@ -37,6 +37,8 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { PostStatusBadge } from '../../src/components/PostStatusBadge';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, shadow, space, typography } from '../../src/theme';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -242,7 +244,7 @@ export default function PostDetailsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+            <Ionicons name="arrow-back" size={22} color={colors.primary} />
             <Text style={styles.backButtonText}>Wróć</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post</Text>
@@ -283,7 +285,7 @@ export default function PostDetailsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+            <Ionicons name="arrow-back" size={22} color={colors.primary} />
             <Text style={styles.backButtonText}>Wróć</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post</Text>
@@ -300,7 +302,7 @@ export default function PostDetailsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
           <Text style={styles.backButtonText}>Wróć</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
@@ -313,7 +315,7 @@ export default function PostDetailsScreen() {
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
-          <View style={styles.postCard}>
+          <SurfaceCard style={styles.postCard}>
             <TouchableOpacity
               style={styles.postHeader}
               onPress={() => post.authorId && router.push(`/profile/${post.authorId}`)}
@@ -359,12 +361,12 @@ export default function PostDetailsScreen() {
               <View style={styles.interactions}>
                 <TouchableOpacity style={styles.interactionButton} onPress={handleLike} disabled={likeUpdating}>
                   <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
-                    <Ionicons name="heart-outline" size={24} color="#333" />
+                    <Ionicons name="heart-outline" size={22} color={colors.textSecondary} />
                   </Animated.View>
                   <Text style={styles.interactionText}>{post.likeCount || 0}</Text>
                 </TouchableOpacity>
                 <View style={styles.interactionButton}>
-                  <Ionicons name="chatbubble-outline" size={22} color="#333" />
+                  <Ionicons name="chatbubble-outline" size={20} color={colors.textSecondary} />
                   <Text style={styles.interactionText}>{post.commentCount || 0}</Text>
                 </View>
               </View>
@@ -394,7 +396,7 @@ export default function PostDetailsScreen() {
             )}
 
             <Text style={styles.commentsTitle}>Komentarze</Text>
-          </View>
+          </SurfaceCard>
         }
         renderItem={({ item }) => {
           const canDelete = user?.uid === item.authorId || isAdmin;
@@ -466,7 +468,7 @@ export default function PostDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   loadingContainer: {
     flex: 1,
@@ -477,9 +479,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
   },
   backButton: {
     flexDirection: 'row',
@@ -487,97 +491,74 @@ const styles = StyleSheet.create({
     width: 60,
   },
   backButtonText: {
-    color: '#007AFF',
-    marginLeft: 5,
-    fontSize: 16,
+    ...typography.bodyEmph,
+    color: colors.primary,
+    marginLeft: 6,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...typography.titleLG,
   },
   listContent: {
-    padding: 15,
+    padding: space.lg,
     paddingBottom: 90,
   },
   postCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 0,
-    marginBottom: 10,
+    padding: space.lg,
+    marginBottom: space.lg,
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: space.md,
   },
   statusRow: {
     flexDirection: 'row',
-    marginBottom: 10,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#eaeaea',
-  },
-  statusPending: {
-    backgroundColor: 'rgba(255, 149, 0, 0.18)',
-  },
-  statusRejected: {
-    backgroundColor: 'rgba(255, 59, 48, 0.18)',
-  },
-  statusDraft: {
-    backgroundColor: 'rgba(142, 142, 147, 0.18)',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#333',
+    marginBottom: space.md,
   },
   rejectionBox: {
-    backgroundColor: '#fff5f5',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.25)',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: hairline,
+    borderColor: 'rgba(155, 44, 44, 0.20)',
+    borderRadius: radius.md,
+    padding: space.md,
+    marginBottom: space.md,
   },
   rejectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#c62828',
+    ...typography.meta,
+    color: colors.danger,
     marginBottom: 4,
   },
   rejectionBody: {
+    ...typography.body,
     fontSize: 13,
-    color: '#333',
+    color: colors.text,
     lineHeight: 18,
   },
   username: {
-    fontWeight: 'bold',
-    fontSize: 16,
+    ...typography.titleMD,
   },
   time: {
-    color: '#888',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.textTertiary,
   },
   content: {
+    ...typography.body,
     fontSize: 15,
-    marginBottom: 10,
+    marginBottom: space.md,
     lineHeight: 22,
   },
   postImage: {
     width: '100%',
     height: 220,
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: '#eee',
+    borderRadius: radius.md,
+    marginBottom: space.md,
+    backgroundColor: colors.skeleton,
   },
   footer: {
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 10,
-    marginBottom: 10,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    paddingTop: space.md,
+    marginBottom: space.md,
   },
   interactions: {
     flexDirection: 'row',
@@ -586,46 +567,45 @@ const styles = StyleSheet.create({
   interactionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: space.xl,
   },
   interactionText: {
-    marginLeft: 5,
-    color: '#666',
-    fontWeight: '500',
+    marginLeft: 6,
+    ...typography.meta,
+    color: colors.textSecondary,
   },
   commentsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 6,
-    marginBottom: 6,
+    ...typography.titleMD,
+    marginTop: space.sm,
+    marginBottom: space.sm,
   },
   eventsContainer: {
-    marginTop: 6,
-    marginBottom: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    marginTop: space.sm,
+    marginBottom: space.md,
+    paddingTop: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
   },
   eventsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 6,
-    color: '#333',
+    ...typography.titleMD,
+    marginBottom: space.sm,
   },
   eventsEmpty: {
-    color: '#888',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.textTertiary,
   },
   eventRow: {
-    color: '#333',
-    fontSize: 12,
+    ...typography.micro,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   commentContainer: {
     marginBottom: 12,
-    padding: 10,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
+    padding: space.md,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   commentHeader: {
     flexDirection: 'row',
@@ -637,18 +617,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   commentAuthor: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    color: '#333',
+    ...typography.bodyEmph,
+    fontSize: 13,
+    color: colors.text,
     marginLeft: 8,
   },
   commentTime: {
-    fontSize: 12,
-    color: '#888',
+    ...typography.micro,
+    color: colors.textTertiary,
   },
   commentText: {
+    ...typography.body,
     fontSize: 15,
-    color: '#444',
+    color: colors.text,
     lineHeight: 20,
   },
   deleteButton: {
@@ -657,13 +638,13 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   deleteButtonText: {
-    color: '#ff4444',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.danger,
   },
   emptyCommentsText: {
     textAlign: 'center',
     marginTop: 10,
-    color: '#888',
+    color: colors.textSecondary,
   },
   inputContainer: {
     position: 'absolute',
@@ -672,30 +653,33 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
+    padding: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
   input: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingHorizontal: 15,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: 10,
-    marginRight: 10,
+    marginRight: space.md,
     maxHeight: 100,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    color: colors.text,
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: 'rgba(31, 61, 43, 0.28)',
   },
 });
 

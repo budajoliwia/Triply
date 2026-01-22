@@ -46,6 +46,8 @@ import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { SkeletonBlock } from '../../src/components/Skeleton';
 import { classifyFirestoreError } from '../../src/utils/firestoreErrors';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, shadow, space, typography } from '../../src/theme';
 
 export default function FeedScreen() {
   const { user, isAdmin } = useAuth();
@@ -356,7 +358,7 @@ export default function FeedScreen() {
     const isExpanded = expandedPostId === item.id;
 
     return (
-      <View style={styles.postContainer}>
+      <SurfaceCard style={styles.postContainer}>
         <TouchableOpacity
           style={styles.header}
           onPress={() => item.authorId && router.push(`/profile/${item.authorId}`)}
@@ -381,13 +383,13 @@ export default function FeedScreen() {
           <View style={styles.interactions}>
             <TouchableOpacity style={styles.interactionButton} onPress={() => handleLike(item)}>
               <Animated.View style={{ transform: [{ scale: item.id === likeAnimPostId ? likeAnim : 1 }] }}>
-                <Ionicons name="heart-outline" size={24} color="#333" />
+                <Ionicons name="heart-outline" size={22} color={colors.textSecondary} />
               </Animated.View>
               <Text style={styles.interactionText}>{item.likeCount || 0}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.interactionButton} onPress={() => toggleComments(item.id)}>
-              <Ionicons name="chatbubble-outline" size={22} color="#333" />
+              <Ionicons name="chatbubble-outline" size={20} color={colors.textSecondary} />
               <Text style={styles.interactionText}>{item.commentCount || 0}</Text>
             </TouchableOpacity>
           </View>
@@ -398,7 +400,7 @@ export default function FeedScreen() {
             {expandedCommentsLoading ? (
               <View style={{ paddingVertical: 6 }}>
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <View key={i} style={[styles.commentRow, { backgroundColor: '#f3f3f3' }]}>
+                  <View key={i} style={[styles.commentRow, { backgroundColor: colors.surface }]}>
                     <SkeletonBlock height={12} width={140} radius={6} />
                     <View style={{ height: 8 }} />
                     <SkeletonBlock height={14} width={'92%'} radius={7} />
@@ -454,13 +456,13 @@ export default function FeedScreen() {
                 {commentSubmitting ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Ionicons name="send" size={18} color="#fff" />
+                  <Ionicons name="send" size={16} color="#fff" />
                 )}
               </TouchableOpacity>
             </View>
           </View>
         )}
-      </View>
+      </SurfaceCard>
     );
   };
 
@@ -498,7 +500,7 @@ export default function FeedScreen() {
           onPress={openNotifications}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="notifications-outline" size={22} color="#333" />
+          <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
           {unreadCount > 0 && (
             <View style={styles.notificationsBadge}>
               <Text style={styles.notificationsBadgeText}>{unreadCount >= 10 ? '9+' : String(unreadCount)}</Text>
@@ -510,7 +512,7 @@ export default function FeedScreen() {
       {loading ? (
         <View style={{ padding: 10 }}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <View key={i} style={[styles.postContainer, { padding: 15 }]}>
+            <SurfaceCard key={i} style={[styles.postContainer, { padding: 15 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                 <SkeletonBlock height={40} width={40} radius={20} />
                 <View style={{ marginLeft: 10, flex: 1 }}>
@@ -524,7 +526,7 @@ export default function FeedScreen() {
               <SkeletonBlock height={14} width={'84%'} radius={7} />
               <View style={{ height: 10 }} />
               <SkeletonBlock height={200} width={'100%'} radius={8} />
-            </View>
+            </SurfaceCard>
           ))}
         </View>
       ) : error ? (
@@ -565,7 +567,7 @@ export default function FeedScreen() {
           onEndReachedThreshold={0.4}
           ListFooterComponent={
             feedType === 'all' && loadingMore ? (
-              <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={colors.primary2} style={{ marginVertical: 12 }} />
             ) : null
           }
           ListEmptyComponent={
@@ -595,7 +597,7 @@ export default function FeedScreen() {
                 onPress={closeNotifications}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={22} color="#333" />
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -673,37 +675,41 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2f2f2',
+    backgroundColor: colors.bg,
   },
   topBar: {
-    backgroundColor: '#fff',
-    padding: 15,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: colors.bg,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
     alignItems: 'center',
     position: 'relative',
   },
   appTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 10,
+    ...typography.titleXL,
+    color: colors.primary,
+    marginBottom: space.sm,
   },
   toggleContainer: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    padding: 2,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    padding: 3,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   notificationsButton: {
     position: 'absolute',
-    right: 15,
-    top: 15,
+    right: space.lg,
+    top: space.lg,
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.surface,
+    borderWidth: hairline,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -714,7 +720,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#ff3b30',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -725,74 +731,66 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   toggleButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 15,
-    borderRadius: 18,
+    paddingVertical: 7,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.pill,
   },
   toggleButtonActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   toggleText: {
     fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontWeight: '700',
   },
   toggleTextActive: {
-    color: '#007AFF',
-    fontWeight: '600',
+    color: colors.primary,
+    fontWeight: '800',
   },
   loader: {
     marginTop: 20,
   },
   listContent: {
-    padding: 10,
-    paddingBottom: 20,
+    padding: space.lg,
+    paddingBottom: space['2xl'],
   },
   postContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    marginBottom: 15,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginBottom: space.lg,
+    padding: space.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: space.md,
   },
   username: {
-    fontWeight: 'bold',
-    fontSize: 16,
+    ...typography.titleMD,
   },
   time: {
-    color: '#888',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.textTertiary,
   },
   content: {
+    ...typography.body,
     fontSize: 15,
-    marginBottom: 10,
+    marginBottom: space.md,
+    color: colors.text,
     lineHeight: 22,
   },
   postImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: '#eee',
+    borderRadius: radius.md,
+    marginBottom: space.md,
+    backgroundColor: colors.skeleton,
   },
   footer: {
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 10,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    paddingTop: space.md,
   },
   interactions: {
     flexDirection: 'row',
@@ -801,20 +799,20 @@ const styles = StyleSheet.create({
   interactionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: space.xl,
   },
   interactionText: {
-    marginLeft: 5,
-    color: '#666',
-    fontWeight: '500',
+    marginLeft: 6,
+    ...typography.meta,
+    color: colors.textSecondary,
   },
   emptyContainer: {
     alignItems: 'center',
     marginTop: 50,
   },
   emptyText: {
-    color: '#888',
-    fontSize: 16,
+    ...typography.body,
+    color: colors.textTertiary,
   },
   sheetOverlay: {
     flex: 1,
@@ -822,28 +820,27 @@ const styles = StyleSheet.create({
   },
   sheetBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: colors.overlay,
   },
   sheetContainer: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: colors.surfaceElevated,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     paddingBottom: 10,
     overflow: 'hidden',
+    ...shadow.floating,
   },
   sheetHeader: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   sheetTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111',
+    ...typography.titleLG,
   },
   sheetEmpty: {
     flex: 1,
@@ -852,8 +849,8 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   sheetEmptyText: {
-    color: '#666',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   sheetListContent: {
@@ -864,48 +861,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
   },
   notifAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ddd',
+    backgroundColor: colors.skeleton,
+    borderWidth: hairline,
+    borderColor: colors.border,
     marginRight: 12,
   },
   notifBody: {
     flex: 1,
   },
   notifText: {
-    color: '#222',
-    fontSize: 14,
+    ...typography.body,
+    color: colors.text,
   },
   notifTextUnread: {
     fontWeight: '700',
   },
   notifTime: {
     marginTop: 2,
-    color: '#888',
-    fontSize: 12,
+    ...typography.micro,
+    color: colors.textTertiary,
   },
   notifUnreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     marginLeft: 10,
   },
   commentsSection: {
     marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 10,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    paddingTop: space.md,
   },
   commentsLoader: {
     paddingVertical: 6,
   },
   emptyCommentsText: {
-    color: '#888',
-    fontSize: 13,
+    ...typography.meta,
+    color: colors.textTertiary,
     paddingVertical: 6,
   },
   commentsList: {
@@ -914,8 +915,10 @@ const styles = StyleSheet.create({
   commentRow: {
     marginBottom: 10,
     padding: 10,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   commentHeaderRow: {
     flexDirection: 'row',
@@ -928,18 +931,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   commentAuthor: {
-    fontWeight: 'bold',
-    fontSize: 13,
-    color: '#333',
+    ...typography.meta,
+    color: colors.text,
     marginLeft: 8,
   },
   commentDelete: {
-    color: '#ff4444',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.danger,
   },
   commentText: {
-    fontSize: 14,
-    color: '#444',
+    ...typography.body,
+    color: colors.text,
     lineHeight: 19,
   },
   commentInputRow: {
@@ -948,22 +950,24 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: 10,
-    marginRight: 10,
+    marginRight: space.md,
     maxHeight: 100,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   commentSendButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   commentSendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: 'rgba(31, 61, 43, 0.28)',
   },
 });

@@ -25,6 +25,8 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { Button } from '../../src/components/Button';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -222,9 +224,7 @@ export default function MyProfileScreen() {
         {bio ? bio : 'Dodaj krótki opis o sobie'}
       </Text>
 
-      <TouchableOpacity style={styles.editProfileButton} onPress={() => router.push('/edit-profile')}>
-        <Text style={styles.editProfileButtonText}>Edytuj profil</Text>
-      </TouchableOpacity>
+      <Button label="Edytuj profil" variant="primary" size="sm" onPress={() => router.push('/edit-profile')} style={{ marginBottom: space.md }} />
 
       <View style={styles.filterRow}>
         <TouchableOpacity
@@ -254,17 +254,16 @@ export default function MyProfileScreen() {
       </View>
 
       {isAdmin && (
-        <TouchableOpacity
-          style={styles.adminButton}
+        <Button
+          label="Panel Admina (Moderacja)"
+          variant="secondary"
+          size="sm"
           onPress={() => router.push('/admin/moderation')}
-        >
-          <Text style={styles.adminButtonText}>Panel Admina (Moderacja)</Text>
-        </TouchableOpacity>
+          style={{ marginBottom: space.md }}
+        />
       )}
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Wyloguj</Text>
-      </TouchableOpacity>
+      <Button label="Wyloguj" variant="destructive" size="sm" onPress={handleLogout} style={{ marginBottom: space.xl }} />
 
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
@@ -365,142 +364,117 @@ export default function MyProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: space['2xl'],
   },
   profileHeader: {
-    padding: 20,
+    padding: space['2xl'],
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
     marginBottom: 5,
   },
   name: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    ...typography.titleXL,
+    marginBottom: space.xs,
   },
   bio: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 15,
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginBottom: space.lg,
     textAlign: 'center',
   },
   bioPlaceholder: {
-    color: '#999',
-  },
-  editProfileButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  editProfileButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
+    color: colors.textTertiary,
   },
   filterRow: {
     flexDirection: 'row',
-    backgroundColor: '#f2f2f2',
-    borderRadius: 999,
-    padding: 4,
-    marginBottom: 12,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    padding: 3,
+    marginBottom: space.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   filterPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: space.lg,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: radius.pill,
   },
   filterPillActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   filterText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
+    fontWeight: '800',
+    color: colors.textSecondary,
   },
   filterTextActive: {
-    color: '#fff',
-  },
-  adminButton: {
-    backgroundColor: '#333',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 10,
-  },
-  adminButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  logoutButton: {
-    marginBottom: 20,
-    padding: 10,
-  },
-  logoutButtonText: {
-    color: '#ff4444',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.primary,
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: space['2xl'],
   },
   statItem: {
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...typography.titleLG,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#888',
+    ...typography.micro,
+    color: colors.textSecondary,
   },
   gridItem: {
     width: ITEM_SIZE,
     height: ITEM_SIZE,
-    padding: 1,
+    padding: 2,
     position: 'relative',
   },
   gridImage: {
     flex: 1,
-    backgroundColor: '#eee',
+    backgroundColor: colors.skeleton,
+    borderRadius: radius.md,
   },
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.surface,
     padding: 5,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   postTextContent: {
     fontSize: 12,
-    color: '#333',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   statusOverlay: {
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(252, 251, 248, 0.92)',
     padding: 6,
     borderRadius: 12,
     maxWidth: ITEM_SIZE - 12,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   reasonOverlay: {
     position: 'absolute',
     left: 4,
     right: 4,
     bottom: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    borderRadius: radius.md,
     paddingHorizontal: 6,
     paddingVertical: 5,
   },
@@ -514,7 +488,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: {
-    color: '#888',
-    fontSize: 16,
+    ...typography.body,
+    color: colors.textTertiary,
   },
 });

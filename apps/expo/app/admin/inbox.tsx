@@ -12,6 +12,9 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { Button } from '../../src/components/Button';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 function formatMeta(n: AdminNotification): string {
   const score = typeof n.meta?.score === 'number' ? n.meta?.score : null;
@@ -75,7 +78,7 @@ export default function AdminInboxScreen() {
       {loading ? (
         <View style={styles.list}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <View key={i} style={styles.card}>
+            <SurfaceCard key={i} style={styles.card}>
               <SkeletonBlock height={16} width={220} radius={8} />
               <View style={{ height: 8 }} />
               <SkeletonBlock height={12} width={120} radius={6} />
@@ -86,7 +89,7 @@ export default function AdminInboxScreen() {
                 <SkeletonBlock height={36} width={120} radius={999} />
                 <SkeletonBlock height={36} width={160} radius={999} />
               </View>
-            </View>
+            </SurfaceCard>
           ))}
         </View>
       ) : error ? (
@@ -120,30 +123,27 @@ export default function AdminInboxScreen() {
             <EmptyState
               title="Brak powiadomień"
               description="Nie ma żadnych postów wymagających ręcznej moderacji."
-              icon="inbox-outline"
+              icon="checkmark-done-outline"
             />
           }
           renderItem={({ item }) => {
             const meta = formatMeta(item);
             const dateLabel = formatTimestampDate(item.createdAt, 'Teraz');
             return (
-              <View style={styles.card}>
+              <SurfaceCard style={styles.card}>
                 <Text style={styles.cardTitle}>Wymaga ręcznej moderacji</Text>
                 <Text style={styles.cardSub}>{dateLabel}</Text>
                 {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
 
                 <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => router.push(`/post/${item.postId}`)}>
-                    <Text style={styles.btnPrimaryText}>Otwórz post</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.btn, styles.btnGhost]}
+                  <Button label="Otwórz post" variant="primary" onPress={() => router.push(`/post/${item.postId}`)} />
+                  <Button
+                    label="Oznacz jako przeczytane"
+                    variant="secondary"
                     onPress={() => markAdminNotificationRead(item.id).catch((e) => console.warn('markAdminNotificationRead failed', e))}
-                  >
-                    <Text style={styles.btnGhostText}>Oznacz jako przeczytane</Text>
-                  </TouchableOpacity>
+                  />
                 </View>
-              </View>
+              </SurfaceCard>
             );
           }}
         />
@@ -153,34 +153,26 @@ export default function AdminInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: colors.bg },
   header: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    backgroundColor: colors.bg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
   },
-  title: { fontSize: 20, fontWeight: 'bold' },
-  list: { padding: 10, paddingBottom: 20 },
+  title: { ...typography.titleXL },
+  list: { padding: space.lg, paddingBottom: space['2xl'] },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#eee',
+    padding: space.lg,
+    marginBottom: space.lg,
   },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: '#111' },
-  cardSub: { marginTop: 4, fontSize: 12, color: '#888' },
-  cardMeta: { marginTop: 8, fontSize: 12, color: '#444' },
-  actions: { marginTop: 12, flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  btn: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
-  btnPrimary: { backgroundColor: '#007AFF' },
-  btnPrimaryText: { color: '#fff', fontWeight: '800' },
-  btnGhost: { backgroundColor: '#f0f0f0' },
-  btnGhostText: { color: '#333', fontWeight: '700' },
+  cardTitle: { ...typography.titleMD },
+  cardSub: { marginTop: 4, ...typography.meta, color: colors.textTertiary },
+  cardMeta: { marginTop: 8, ...typography.meta, color: colors.textSecondary },
+  actions: { marginTop: space.lg, flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   empty: { padding: 24, alignItems: 'center' },
-  emptyText: { color: '#666' },
+  emptyText: { ...typography.body, color: colors.textSecondary },
 });
 
 

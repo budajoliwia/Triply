@@ -1,10 +1,12 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Button } from './Button';
+import { colors, radius, space, typography } from '../theme';
 
 export function EmptyState({
   title,
   description,
-  icon = 'inbox-outline',
+  icon = 'notifications-outline',
   actionLabel,
   onAction,
 }: {
@@ -17,14 +19,12 @@ export function EmptyState({
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
-        <Ionicons name={icon} size={22} color="#555" />
+        <Ionicons name={icon} size={22} color={colors.textSecondary} />
       </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
       {actionLabel && onAction ? (
-        <TouchableOpacity style={styles.btn} onPress={onAction}>
-          <Text style={styles.btnText}>{actionLabel}</Text>
-        </TouchableOpacity>
+        <Button label={actionLabel} onPress={onAction} variant="primary" size="sm" style={{ marginTop: space.lg }} />
       ) : null}
     </View>
   );
@@ -32,7 +32,7 @@ export function EmptyState({
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    padding: space['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -40,34 +40,22 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: space.sm,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#111',
+    ...typography.titleMD,
     textAlign: 'center',
   },
   desc: {
-    marginTop: 6,
-    fontSize: 13,
-    color: '#666',
+    marginTop: space.xs,
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
-  },
-  btn: {
-    marginTop: 14,
-    backgroundColor: '#007AFF',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  btnText: {
-    color: '#fff',
-    fontWeight: '800',
   },
 });
 

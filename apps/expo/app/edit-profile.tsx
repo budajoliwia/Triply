@@ -3,7 +3,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
   Alert,
@@ -21,6 +20,8 @@ import { db } from '../src/firebase/client';
 import { Avatar } from '../src/components/Avatar';
 import { resolveAvatarUrl, updateMyProfile } from '../src/services/users';
 import { mapFirestoreErrorToMessage } from '../src/utils/firestoreErrors';
+import { Button } from '../src/components/Button';
+import { colors, hairline, radius, space, typography } from '../src/theme';
 
 const BIO_MAX = 160;
 
@@ -137,11 +138,20 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: true, headerTitle: 'Edytuj profil' }} />
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTitle: 'Edytuj profil',
+          headerStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+          headerTintColor: colors.primary,
+          headerTitleStyle: { ...typography.titleLG },
+        }}
+      />
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <KeyboardAvoidingView
@@ -151,9 +161,7 @@ export default function EditProfileScreen() {
         >
           <View style={styles.avatarSection}>
             <Avatar size={96} uri={avatarLocalUri || avatarUrl} />
-            <TouchableOpacity style={styles.changePhotoButton} onPress={pickAvatar} disabled={saving}>
-              <Text style={styles.changePhotoButtonText}>Zmień zdjęcie</Text>
-            </TouchableOpacity>
+            <Button label="Zmień zdjęcie" variant="secondary" size="sm" onPress={pickAvatar} disabled={saving} style={{ marginTop: space.md }} />
             <Text style={styles.usernameLabel}>{username ? `@${username}` : ''}</Text>
           </View>
 
@@ -172,20 +180,11 @@ export default function EditProfileScreen() {
               multiline
               editable={!saving}
               textAlignVertical="top"
+              placeholderTextColor={colors.textTertiary}
             />
           </View>
 
-          <TouchableOpacity
-            style={[styles.saveButton, (saving || remaining < 0) && styles.saveButtonDisabled]}
-            onPress={onSave}
-            disabled={saving || remaining < 0}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Zapisz</Text>
-            )}
-          </TouchableOpacity>
+          <Button label="Zapisz" onPress={onSave} loading={saving} disabled={saving || remaining < 0} style={styles.saveButton} />
         </KeyboardAvoidingView>
       )}
     </SafeAreaView>
@@ -195,7 +194,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   center: {
     flex: 1,
@@ -204,73 +203,47 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: space.lg,
   },
   avatarSection: {
     alignItems: 'center',
-    paddingVertical: 10,
-  },
-  changePhotoButton: {
-    marginTop: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#eee',
-    backgroundColor: '#fafafa',
-  },
-  changePhotoButtonText: {
-    fontWeight: '700',
-    color: '#007AFF',
+    paddingVertical: space.md,
   },
   usernameLabel: {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '600',
+    marginTop: space.md,
+    ...typography.meta,
+    color: colors.textSecondary,
   },
   field: {
-    marginTop: 14,
+    marginTop: space.lg,
   },
   fieldHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: space.sm,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111',
+    ...typography.meta,
+    color: colors.text,
   },
   counter: {
-    fontSize: 12,
-    color: '#666',
+    ...typography.micro,
+    color: colors.textSecondary,
   },
   counterOver: {
-    color: '#ff3b30',
+    color: colors.danger,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 12,
-    padding: 12,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: space.lg,
     minHeight: 120,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surfaceElevated,
+    color: colors.text,
   },
   saveButton: {
-    marginTop: 16,
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 16,
+    marginTop: space.xl,
   },
 });
 

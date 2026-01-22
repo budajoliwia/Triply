@@ -1,4 +1,5 @@
 import { Image, StyleSheet, View, type ImageStyle, type ViewStyle, type StyleProp } from 'react-native';
+import { colors } from '../theme';
 
 type Props = {
   size: number;
@@ -31,10 +32,10 @@ export function Avatar({ size, uri, style, imageStyle, cacheBuster }: Props) {
 
 const styles = StyleSheet.create({
   placeholder: {
-    backgroundColor: '#ddd',
+    backgroundColor: colors.skeleton,
   },
   image: {
-    backgroundColor: '#eee',
+    backgroundColor: colors.skeleton,
   },
 });
 

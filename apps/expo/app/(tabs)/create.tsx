@@ -19,6 +19,10 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../src/context/auth';
 import { createPost } from '../../src/services/posts';
 import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { Avatar } from '../../src/components/Avatar';
+import { Button } from '../../src/components/Button';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 export default function CreateScreen() {
   const { user } = useAuth();
@@ -126,7 +130,7 @@ export default function CreateScreen() {
   if (success) {
     return (
       <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <Ionicons name="checkmark-circle" size={80} color="#4CD964" />
+        <Ionicons name="checkmark-circle" size={76} color={colors.success} />
         <Text style={styles.successText}>Sukces! Post wysłany do moderacji.</Text>
       </SafeAreaView>
     );
@@ -138,22 +142,12 @@ export default function CreateScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Nowy wpis</Text>
-        <TouchableOpacity
-          style={[styles.postButton, !canPublish && styles.disabledButton]}
-          onPress={handleCreatePost}
-          disabled={!canPublish}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.postButtonText}>Opublikuj</Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Opublikuj" onPress={handleCreatePost} loading={loading} disabled={!canPublish} size="sm" />
       </View>
 
       <ScrollView style={styles.content}>
-        <View style={styles.inputContainer}>
-          <View style={styles.avatar} />
+        <SurfaceCard style={styles.inputContainer}>
+          <Avatar size={40} uri={null} />
           <TextInput
             style={styles.input}
             placeholder="Co słychać? Podziel się czymś..."
@@ -161,8 +155,9 @@ export default function CreateScreen() {
             value={content}
             onChangeText={setContent}
             textAlignVertical="top"
+            placeholderTextColor={colors.textTertiary}
           />
-        </View>
+        </SurfaceCard>
 
         {image && (
           <View style={styles.imagePreviewContainer}>
@@ -173,10 +168,14 @@ export default function CreateScreen() {
           </View>
         )}
 
-        <TouchableOpacity style={[styles.addPhotoBtn, loading && styles.addPhotoBtnDisabled]} onPress={pickImage} disabled={loading}>
-          <Ionicons name="image-outline" size={24} color="#007AFF" />
-          <Text style={styles.addPhotoText}>Dodaj zdjęcie</Text>
-        </TouchableOpacity>
+        <Button
+          label="Dodaj zdjęcie"
+          variant="secondary"
+          onPress={pickImage}
+          disabled={loading}
+          left={<Ionicons name="image-outline" size={18} color={colors.primary} />}
+          style={styles.addPhotoBtn}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -185,104 +184,74 @@ export default function CreateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  postButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  postButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    ...typography.titleLG,
   },
   content: {
     flex: 1,
-    padding: 15,
+    padding: space.lg,
   },
   inputContainer: {
     flexDirection: 'row',
-    marginBottom: 20,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ddd',
-    marginRight: 10,
+    marginBottom: space.lg,
+    padding: space.lg,
+    alignItems: 'flex-start',
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    ...typography.body,
+    fontSize: 15,
     minHeight: 100,
-    paddingTop: 8,
+    paddingTop: 6,
+    paddingLeft: space.md,
+    color: colors.text,
   },
   imagePreviewContainer: {
-    marginBottom: 20,
+    marginBottom: space.lg,
     position: 'relative',
   },
   imagePreview: {
     width: '100%',
     height: 300,
-    borderRadius: 10,
-    backgroundColor: '#f0f0f0',
+    borderRadius: radius.lg,
+    backgroundColor: colors.skeleton,
   },
   removeImageBtn: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 15,
+    backgroundColor: colors.overlay,
+    borderRadius: radius.pill,
   },
   addPhotoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    justifyContent: 'center',
-  },
-  addPhotoText: {
-    marginLeft: 10,
-    color: '#007AFF',
-    fontWeight: '500',
+    alignSelf: 'flex-start',
   },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
+    padding: space['2xl'],
   },
   successText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 10,
+    ...typography.titleLG,
+    marginTop: space.lg,
+    marginBottom: space.sm,
+    textAlign: 'center',
   },
   redirectText: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 8,
-  },
-  addPhotoBtnDisabled: {
-    opacity: 0.6,
   },
 });

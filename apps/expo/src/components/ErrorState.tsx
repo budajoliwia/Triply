@@ -1,5 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Button } from './Button';
+import { colors, space, typography } from '../theme';
 
 export type ErrorKind = 'offline' | 'permission' | 'timeout' | 'unknown';
 
@@ -26,22 +28,18 @@ export function ErrorState({
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
-        <Ionicons name={KIND_ICON[kind]} size={22} color="#b00020" />
+        <Ionicons name={KIND_ICON[kind]} size={22} color={colors.danger} />
       </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
-      {onRetry ? (
-        <TouchableOpacity style={styles.btn} onPress={onRetry}>
-          <Text style={styles.btnText}>{retryLabel}</Text>
-        </TouchableOpacity>
-      ) : null}
+      {onRetry ? <Button label={retryLabel} onPress={onRetry} variant="primary" size="sm" style={{ marginTop: space.lg }} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    padding: space['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -49,34 +47,22 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 59, 48, 0.12)',
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: space.sm,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#111',
+    ...typography.titleMD,
     textAlign: 'center',
   },
   desc: {
-    marginTop: 6,
-    fontSize: 13,
-    color: '#666',
+    marginTop: space.xs,
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
-  },
-  btn: {
-    marginTop: 14,
-    backgroundColor: '#007AFF',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  btnText: {
-    color: '#fff',
-    fontWeight: '800',
   },
 });
 

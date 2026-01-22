@@ -16,6 +16,8 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -68,15 +70,16 @@ export default function SearchScreen() {
 
   const renderItem = ({ item }: { item: UserProfile }) => (
     <TouchableOpacity
-      style={styles.userItem}
       onPress={() => router.push(`/profile/${item.id}`)}
     >
-      <Avatar size={40} uri={item.avatarUrl} />
-      <View style={styles.userInfo}>
-        <Text style={styles.username}>{item.username}</Text>
-        <Text style={styles.email}>{item.email}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#ccc" />
+      <SurfaceCard style={styles.userItem}>
+        <Avatar size={40} uri={item.avatarUrl} />
+        <View style={styles.userInfo}>
+          <Text style={styles.username}>{item.username}</Text>
+          <Text style={styles.email}>{item.email}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+      </SurfaceCard>
     </TouchableOpacity>
   );
 
@@ -85,7 +88,7 @@ export default function SearchScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Wyszukaj</Text>
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Szukaj użytkowników..."
@@ -93,10 +96,11 @@ export default function SearchScreen() {
             onChangeText={setQuery}
             autoCapitalize="none"
             autoCorrect={false}
+            placeholderTextColor={colors.textTertiary}
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#666" />
+              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -160,26 +164,28 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   header: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#007AFF',
+    ...typography.titleXL,
+    marginBottom: space.lg,
+    color: colors.primary,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
     height: 40,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   searchIcon: {
     marginRight: 10,
@@ -187,29 +193,33 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: '100%',
-    fontSize: 16,
+    ...typography.body,
+    fontSize: 15,
+    color: colors.text,
   },
   listContent: {
-    padding: 15,
+    padding: space.lg,
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    padding: space.lg,
+    marginBottom: space.md,
+    borderRadius: radius.lg,
   },
   userInfo: {
     flex: 1,
+    marginLeft: space.md,
   },
   username: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...typography.bodyEmph,
+    fontSize: 15,
     marginBottom: 2,
+    color: colors.text,
   },
   email: {
-    fontSize: 12,
-    color: '#888',
+    ...typography.meta,
+    color: colors.textSecondary,
   },
   centerContainer: {
     flex: 1,
@@ -218,8 +228,8 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   emptyText: {
-    color: '#888',
-    fontSize: 16,
+    ...typography.body,
+    color: colors.textTertiary,
   },
 });
 

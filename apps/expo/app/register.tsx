@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, TextInput, Button, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, TextInput, Text, StyleSheet, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import {
   doc,
@@ -13,6 +13,9 @@ import {
 import { Link } from 'expo-router';
 import { auth, db } from '../src/firebase/client';
 import { UserDoc, ISODateString } from '@triply/shared';
+import { Button } from '../src/components/Button';
+import { SurfaceCard } from '../src/components/SurfaceCard';
+import { colors, hairline, radius, space, typography } from '../src/theme';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -108,78 +111,109 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Register</Text>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container} keyboardVerticalOffset={0}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Utwórz konto</Text>
+          <Text style={styles.subtitle}>Spokojnie — to zajmie chwilę</Text>
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+        <SurfaceCard style={styles.card}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="np. jan@triply.com"
+            placeholderTextColor={colors.textTertiary}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-      />
+          <Text style={[styles.label, { marginTop: space.md }]}>Nazwa użytkownika</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="np. janpodrozuje"
+            placeholderTextColor={colors.textTertiary}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+          />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+          <Text style={[styles.label, { marginTop: space.md }]}>Hasło</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Minimum 6 znaków"
+            placeholderTextColor={colors.textTertiary}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-      />
+          <Text style={[styles.label, { marginTop: space.md }]}>Powtórz hasło</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Jeszcze raz"
+            placeholderTextColor={colors.textTertiary}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
 
-      {loading ? (
-        <ActivityIndicator size="large" />
-      ) : (
-        <Button title="Register" onPress={handleRegister} />
-      )}
+          <Button label="Zarejestruj" onPress={handleRegister} loading={loading} disabled={loading} style={{ marginTop: space.xl }} />
 
-      <Link href="/login" asChild>
-        <Text style={styles.link}>Already have an account? Login</Text>
-      </Link>
-    </View>
+          <Link href="/login" asChild>
+            <Text style={styles.link}>Masz już konto? Zaloguj się</Text>
+          </Link>
+        </SurfaceCard>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
+    backgroundColor: colors.bg,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 15,
+    backgroundColor: colors.surface,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: 11,
+    ...typography.body,
+  },
+  header: {
+    paddingHorizontal: space['2xl'],
+    paddingTop: space['3xl'],
+    paddingBottom: space.xl,
+    alignItems: 'center',
+  },
+  title: {
+    ...typography.titleXL,
+    color: colors.primary,
+  },
+  subtitle: {
+    marginTop: space.sm,
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  card: {
+    marginHorizontal: space.lg,
+    padding: space['2xl'],
+  },
+  label: {
+    ...typography.meta,
+    color: colors.textSecondary,
+    marginBottom: space.sm,
   },
   link: {
-    marginTop: 15,
-    color: 'blue',
+    marginTop: space.lg,
     textAlign: 'center',
+    ...typography.meta,
+    color: colors.primary,
   },
 });

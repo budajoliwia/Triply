@@ -24,6 +24,7 @@ import { formatTimestampDate } from '../../src/utils/time';
 import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
+import { colors, hairline, radius, space, typography } from '../../src/theme';
 
 export default function CommentsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -181,7 +182,7 @@ export default function CommentsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
           <Text style={styles.backButtonText}>Wróć</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Komentarze</Text>
@@ -268,7 +269,7 @@ export default function CommentsScreen() {
           {submitting ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Ionicons name="send" size={20} color="#fff" />
+            <Ionicons name="send" size={18} color="#fff" />
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -279,15 +280,17 @@ export default function CommentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
   },
   backButton: {
     flexDirection: 'row',
@@ -295,23 +298,24 @@ const styles = StyleSheet.create({
     width: 60,
   },
   backButtonText: {
-    color: '#007AFF',
-    marginLeft: 5,
-    fontSize: 16,
+    ...typography.bodyEmph,
+    color: colors.primary,
+    marginLeft: 6,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...typography.titleLG,
   },
   listContent: {
-    padding: 15,
+    padding: space.lg,
     paddingBottom: 80,
   },
   commentContainer: {
     marginBottom: 15,
-    padding: 10,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
+    padding: space.md,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   commentHeader: {
     flexDirection: 'row',
@@ -324,18 +328,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   username: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    color: '#333',
+    ...typography.bodyEmph,
+    fontSize: 13,
+    color: colors.text,
     marginLeft: 8,
   },
   timestamp: {
-    fontSize: 12,
-    color: '#888',
+    ...typography.micro,
+    color: colors.textTertiary,
   },
   commentText: {
+    ...typography.body,
     fontSize: 15,
-    color: '#444',
+    color: colors.text,
     lineHeight: 20,
   },
   deleteButton: {
@@ -344,13 +349,13 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   deleteButtonText: {
-    color: '#ff4444',
-    fontSize: 12,
+    ...typography.meta,
+    color: colors.danger,
   },
   emptyText: {
     textAlign: 'center',
     marginTop: 30,
-    color: '#888',
+    color: colors.textSecondary,
   },
   inputContainer: {
     position: 'absolute',
@@ -359,30 +364,33 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
+    padding: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
   },
   input: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingHorizontal: 15,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: 10,
-    marginRight: 10,
+    marginRight: space.md,
     maxHeight: 100,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    color: colors.text,
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: 'rgba(31, 61, 43, 0.28)',
   },
   loadMoreButton: {
     marginTop: 10,
@@ -390,12 +398,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 18,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.surface,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   loadMoreText: {
-    color: '#007AFF',
-    fontSize: 13,
-    fontWeight: '600',
+    ...typography.meta,
+    color: colors.primary,
   },
   loadMoreSpinner: {
     marginTop: 10,
