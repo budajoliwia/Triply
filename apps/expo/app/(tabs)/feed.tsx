@@ -120,7 +120,7 @@ export default function FeedScreen() {
 
   useEffect(() => {
     const actorIds = Array.from(new Set(notifications.map((n) => n.actorId).filter(Boolean)));
-    const missing = actorIds.filter((id) => !actorCache[id]);
+    const missing = actorIds.filter((id) => id !== 'system' && !actorCache[id]);
     if (missing.length === 0) return;
 
     let cancelled = false;
@@ -154,7 +154,7 @@ export default function FeedScreen() {
     }
     markedThisOpenRef.current = true;
 
-    markNotificationsRead(unreadIds).catch((e) => {
+    markNotificationsRead(user.uid, unreadIds).catch((e) => {
       console.warn('Failed to mark notifications read:', e);
     });
   }, [notifVisible, notifications, user?.uid]);
@@ -537,14 +537,18 @@ export default function FeedScreen() {
                 contentContainerStyle={styles.sheetListContent}
                 renderItem={({ item: n }) => {
                   const username = actorCache[n.actorId]?.username;
-                  const actorLabel = username ? `@${username}` : 'Użytkownik';
+                  const actorLabel = n.actorId === 'system' ? 'System' : username ? `@${username}` : 'Użytkownik';
 
                   const message =
-                    n.type === 'follow'
-                      ? `${actorLabel} zaczął/a Cię obserwować`
-                      : n.type === 'like'
-                        ? `${actorLabel} polubił/a Twój post`
-                        : `${actorLabel} skomentował/a Twój post`;
+                    typeof n.messagePL === 'string' && n.messagePL.trim()
+                      ? n.messagePL.trim()
+                      : n.type === 'follow'
+                        ? `${actorLabel} zaczął/a Cię obserwować`
+                        : n.type === 'like'
+                          ? `${actorLabel} polubił/a Twój post`
+                          : n.type === 'comment'
+                            ? `${actorLabel} skomentował/a Twój post`
+                            : 'Masz nowe powiadomienie.';
 
                   const dateLabel = formatTimestampDate(n.createdAt, 'Teraz');
 
@@ -554,7 +558,7 @@ export default function FeedScreen() {
                       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
                     }
                     try {
-                      if (!n.read) await markNotificationRead(n.id);
+                      if (!n.read && user?.uid) await markNotificationRead(user.uid, n.id);
                     } catch (e) {
                       console.warn('Failed to mark notification read:', e);
                       // revert on failure

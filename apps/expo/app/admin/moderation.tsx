@@ -14,16 +14,21 @@ import {
   Platform,
 } from 'react-native';
 import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
 import { getPosts, approvePost, rejectPost, Post } from '../../src/services/posts';
 import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { subscribeAdminUnreadCount } from '../../src/services/adminNotifications';
+import { useAuth } from '../../src/context/auth';
 
 export default function ModerationScreen() {
+  const { isAdmin } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectingPostId, setRejectingPostId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState(0);
 
   const fetchPosts = async () => {
     setLoading(true);
@@ -41,6 +46,14 @@ export default function ModerationScreen() {
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    return subscribeAdminUnreadCount(
+      (count) => setInboxUnread(count),
+      (e) => console.warn('Admin unread count listener error:', e),
+    );
+  }, [isAdmin]);
 
   const handleApprove = async (id: string) => {
     try {
@@ -112,9 +125,19 @@ export default function ModerationScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Moderacja ({posts.length})</Text>
-        <TouchableOpacity onPress={fetchPosts}>
-          <Text style={styles.refreshText}>Odśwież</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.inboxBtn} onPress={() => router.push('/admin/inbox')}>
+            <Text style={styles.inboxText}>Inbox</Text>
+            {inboxUnread > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{inboxUnread >= 10 ? '9+' : String(inboxUnread)}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={fetchPosts}>
+            <Text style={styles.refreshText}>Odśwież</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -178,12 +201,44 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
   },
   refreshText: {
     color: '#007AFF',
+  },
+  inboxBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#f0f0f0',
+  },
+  inboxText: {
+    color: '#333',
+    fontWeight: '700',
+  },
+  badge: {
+    marginLeft: 8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   list: {
     padding: 10,

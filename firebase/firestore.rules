@@ -250,6 +250,38 @@ service cloud.firestore {
                     // and only the 'read' field may change
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
     }
+
+    // --- Notifications (per-user subcollection, new model) ---
+    // notifications/{userId}/items/{notificationId}
+    match /notifications/{userId}/items/{notificationId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+
+      // Backend-only writes.
+      allow create, delete: if false;
+
+      // Allow client to mark as read, without changing other fields.
+      allow update: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && resource.data.read == false
+                    && request.resource.data.read == true
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
+
+    // --- Admin Inbox Notifications ---
+    // adminNotifications/{notificationId}
+    match /adminNotifications/{notificationId} {
+      allow read: if isAuthenticated() && isAdmin();
+
+      // Backend-only writes.
+      allow create, delete: if false;
+
+      // Allow admin to mark as read only.
+      allow update: if isAuthenticated()
+                    && isAdmin()
+                    && resource.data.read == false
+                    && request.resource.data.read == true
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
     
     match /{document=**} {
       allow read, write: if false;

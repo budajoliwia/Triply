@@ -12,6 +12,10 @@ import {
 const db = getFirestore();
 const storage = getStorage();
 
+const ADMIN_NOTIFICATIONS_COLLECTION = 'adminNotifications';
+const USER_NOTIFICATIONS_COLLECTION = 'notifications';
+const USER_NOTIFICATION_ITEMS_SUBCOLLECTION = 'items';
+
 function hasTextCheckedAt(data: Record<string, unknown>): boolean {
   const moderation = data.moderation;
   if (!moderation || typeof moderation !== 'object') return false;
@@ -55,6 +59,26 @@ function combineDecisions(params: {
 function asDecision(value: unknown): AiModerationDecision | null {
   if (value === 'ALLOW' || value === 'REVIEW' || value === 'BLOCK') return value;
   return null;
+}
+
+function mergeCategories(a?: Record<string, number> | null, b?: Record<string, number> | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (obj?: Record<string, number> | null) => {
+    if (!obj) return;
+    for (const [k, v] of Object.entries(obj)) {
+      if (!k) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      const prev = typeof out[k] === 'number' ? out[k] : 0;
+      out[k] = Math.max(prev, v);
+    }
+  };
+  add(a);
+  add(b);
+  return out;
+}
+
+function userNotificationDocId(type: string, postId: string): string {
+  return `${type}_${postId}`;
 }
 
 function deriveStoragePathFromUrl(url: string): string | null {
@@ -211,6 +235,12 @@ async function moderatePostIfNeeded(params: {
       const currentStatus = asPostStatus(current.status);
       if (currentStatus !== 'pending') return;
 
+      const authorId = typeof (current as any).authorId === 'string' ? ((current as any).authorId as string) : null;
+      if (!authorId) {
+        logger.warn('[aiModeration] missing_authorId', { postId, eventId });
+        return;
+      }
+
       const currentTextDecision = asDecision((current as any)?.moderation?.decision) ?? 'REVIEW';
       const currentImageDecision = asDecision((current as any)?.moderation?.image?.decision);
 
@@ -281,6 +311,107 @@ async function moderatePostIfNeeded(params: {
       // Idempotent: use deterministic IDs (set overwrites on retry).
       t.set(startedRef, { type: 'ai_review_started', actorId, createdAt: FieldValue.serverTimestamp() }, { merge: false });
       t.set(outcomeRef, { type: outcomeType, actorId, createdAt: FieldValue.serverTimestamp() }, { merge: false });
+
+      // --- Moderation-related notifications (admin inbox + author) ---
+      const userItems = db
+        .collection(USER_NOTIFICATIONS_COLLECTION)
+        .doc(authorId)
+        .collection(USER_NOTIFICATION_ITEMS_SUBCOLLECTION);
+
+      if (combinedDecision === 'REVIEW') {
+        const adminRef = db.collection(ADMIN_NOTIFICATIONS_COLLECTION).doc(`review_${postId}`);
+        const adminSnap = await t.get(adminRef);
+
+        const categories = mergeCategories(textResult?.categories ?? null, imageResult?.categories ?? null);
+        const score = Math.max(textResult?.score ?? 0, imageResult?.score ?? 0);
+        const meta: Record<string, unknown> = {
+          ...(Object.keys(categories).length ? { categories } : {}),
+          ...(Number.isFinite(score) && score > 0 ? { score } : {}),
+        };
+
+        if (!adminSnap.exists) {
+          t.set(
+            adminRef,
+            {
+              type: 'post_needs_review',
+              postId,
+              actorId: 'system',
+              createdAt: FieldValue.serverTimestamp(),
+              read: false,
+              ...(Object.keys(meta).length ? { meta } : {}),
+            },
+            { merge: false },
+          );
+        } else {
+          // Keep it unread (if it was read) and refresh meta; preserve createdAt.
+          t.set(adminRef, { read: false, ...(Object.keys(meta).length ? { meta } : {}) }, { merge: true });
+        }
+
+        const notifId = userNotificationDocId('post_ai_review', postId);
+        const userRef = userItems.doc(notifId);
+        const userSnap = await t.get(userRef);
+        if (!userSnap.exists) {
+          t.set(
+            userRef,
+            {
+              type: 'post_ai_review',
+              postId,
+              actorId: 'system',
+              createdAt: FieldValue.serverTimestamp(),
+              read: false,
+              messagePL: 'Post czeka na ręczną moderację.',
+            },
+            { merge: false },
+          );
+        }
+      }
+
+      if (combinedDecision === 'ALLOW') {
+        const notifId = userNotificationDocId('post_ai_approved', postId);
+        const userRef = userItems.doc(notifId);
+        const userSnap = await t.get(userRef);
+        if (!userSnap.exists) {
+          t.set(
+            userRef,
+            {
+              type: 'post_ai_approved',
+              postId,
+              actorId: 'system',
+              createdAt: FieldValue.serverTimestamp(),
+              read: false,
+              messagePL: 'Post został automatycznie zatwierdzony.',
+            },
+            { merge: false },
+          );
+        }
+      }
+
+      if (combinedDecision === 'BLOCK') {
+        const notifId = userNotificationDocId('post_ai_rejected', postId);
+        const userRef = userItems.doc(notifId);
+        const userSnap = await t.get(userRef);
+
+        const rr = typeof updates.rejectionReason === 'string' ? (updates.rejectionReason as string) : null;
+        const reason = rr && rr.trim() ? rr.trim().slice(0, 240) : null;
+
+        if (!userSnap.exists) {
+          t.set(
+            userRef,
+            {
+              type: 'post_ai_rejected',
+              postId,
+              actorId: 'system',
+              createdAt: FieldValue.serverTimestamp(),
+              read: false,
+              messagePL: reason
+                ? `Post został odrzucony przez moderację AI. Powód: ${reason}`.slice(0, 240)
+                : 'Post został odrzucony przez moderację AI.',
+              ...(reason ? { meta: { rejectionReason: reason } } : {}),
+            },
+            { merge: false },
+          );
+        }
+      }
 
       t.update(postRef, updates);
     });
