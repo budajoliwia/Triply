@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Animated,
   FlatList,
   TextInput,
   KeyboardAvoidingView,
@@ -16,6 +17,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../src/context/auth';
 import {
   addComment,
@@ -61,6 +63,7 @@ export default function PostDetailsScreen() {
   const [retryKey, setRetryKey] = useState(0);
   const [likeUpdating, setLikeUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const likeAnim = useState(() => new Animated.Value(1))[0];
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -153,6 +156,12 @@ export default function PostDetailsScreen() {
     if (likeUpdating) return;
 
     setLikeUpdating(true);
+    likeAnim.setValue(1);
+    Animated.sequence([
+      Animated.timing(likeAnim, { toValue: 1.12, duration: 90, useNativeDriver: true }),
+      Animated.timing(likeAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
       const liked = await toggleLike(post.id, user.uid);
       setPost((prev) => {
@@ -349,7 +358,9 @@ export default function PostDetailsScreen() {
             <View style={styles.footer}>
               <View style={styles.interactions}>
                 <TouchableOpacity style={styles.interactionButton} onPress={handleLike} disabled={likeUpdating}>
-                  <Ionicons name="heart-outline" size={24} color="#333" />
+                  <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
+                    <Ionicons name="heart-outline" size={24} color="#333" />
+                  </Animated.View>
                   <Text style={styles.interactionText}>{post.likeCount || 0}</Text>
                 </TouchableOpacity>
                 <View style={styles.interactionButton}>

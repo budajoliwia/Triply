@@ -15,43 +15,51 @@ import {
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { getPosts, approvePost, rejectPost, Post } from '../../src/services/posts';
+import { approvePost, getPostById, rejectPost, type Post } from '../../src/services/posts';
 import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
-import { subscribeAdminUnreadCount } from '../../src/services/adminNotifications';
+import {
+  markAdminNotificationRead,
+  subscribeAdminNotifications,
+  subscribeAdminUnreadCount,
+  type AdminNotification,
+} from '../../src/services/adminNotifications';
 import { useAuth } from '../../src/context/auth';
 import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
-import { PostStatusBadge } from '../../src/components/PostStatusBadge';
+import { formatTimestampDate } from '../../src/utils/time';
 
 export default function ModerationScreen() {
   const { isAdmin } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [items, setItems] = useState<AdminNotification[]>([]);
+  const [postById, setPostById] = useState<Record<string, Post | null>>({});
+  const [actionPostId, setActionPostId] = useState<string | null>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
-  const [rejectingPostId, setRejectingPostId] = useState<string | null>(null);
+  const [rejectingItem, setRejectingItem] = useState<AdminNotification | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
 
-  const fetchPosts = async () => {
-    setLoading(true);
-    try {
-      setError(null);
-      const pendingPosts = await getPosts('pending');
-      setPosts(pendingPosts);
-    } catch (error) {
-      console.error(error);
-      setError(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchPosts();
-  }, []);
+    if (!isAdmin) return;
+    setLoading(true);
+    setError(null);
+    return subscribeAdminNotifications(
+      { limit: 50, unreadOnly: true },
+      (next) => {
+        setItems(next);
+        setLoading(false);
+      },
+      (e) => {
+        console.warn('Admin moderation listener error:', e);
+        setError(e);
+        setLoading(false);
+      },
+    );
+  }, [isAdmin, reloadKey]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -61,19 +69,74 @@ export default function ModerationScreen() {
     );
   }, [isAdmin]);
 
-  const handleApprove = async (id: string) => {
+  useEffect(() => {
+    // Fetch post previews for unseen inbox items.
+    const missing = items.map((i) => i.postId).filter((postId) => postId && !(postId in postById));
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(
+        missing.map(async (postId) => {
+          try {
+            const p = await getPostById(postId);
+            return { postId, post: p };
+          } catch (e) {
+            console.warn('Failed to load post preview:', postId, e);
+            return { postId, post: null };
+          }
+        }),
+      );
+      if (cancelled) return;
+      setPostById((prev) => {
+        const next = { ...prev };
+        for (const r of results) next[r.postId] = r.post;
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, postById]);
+
+  function formatAiReason(n: AdminNotification): { score?: string; categories?: string } {
+    const score = typeof n.meta?.score === 'number' ? n.meta.score : null;
+    const cats = n.meta?.categories && typeof n.meta.categories === 'object' ? n.meta.categories : null;
+    const top = cats
+      ? Object.entries(cats)
+          .filter(([, v]) => typeof v === 'number')
+          .sort((a, b) => (b[1] as number) - (a[1] as number))
+          .slice(0, 5)
+          .map(([k, v]) => `${k}: ${Number(v).toFixed(2)}`)
+          .join(', ')
+      : '';
+    return {
+      ...(score != null ? { score: `score: ${score.toFixed(2)}` } : {}),
+      ...(top ? { categories: top } : {}),
+    };
+  }
+
+  const handleApprove = async (item: AdminNotification) => {
+    if (actionPostId) return;
+    setActionPostId(item.postId);
+    // optimistic remove
+    setItems((prev) => prev.filter((x) => x.id !== item.id));
     try {
-      await approvePost(id);
+      await approvePost(item.postId);
+      await markAdminNotificationRead(item.id);
       Alert.alert('Sukces', 'Post zatwierdzony.');
-      fetchPosts(); // Refresh list
     } catch (error) {
       console.error(error);
+      setItems((prev) => [item, ...prev]);
       Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się zatwierdzić posta.'));
+    } finally {
+      setActionPostId(null);
     }
   };
 
-  const openRejectModal = (id: string) => {
-    setRejectingPostId(id);
+  const openRejectModal = (item: AdminNotification) => {
+    setRejectingItem(item);
     setRejectReason('');
     setRejectModalVisible(true);
   };
@@ -81,59 +144,33 @@ export default function ModerationScreen() {
   const closeRejectModal = () => {
     if (rejectSubmitting) return;
     setRejectModalVisible(false);
-    setRejectingPostId(null);
+    setRejectingItem(null);
     setRejectReason('');
   };
 
   const confirmReject = async () => {
-    if (!rejectingPostId) return;
+    if (!rejectingItem) return;
     if (rejectSubmitting) return;
     setRejectSubmitting(true);
     try {
-      await rejectPost(rejectingPostId, rejectReason);
+      setItems((prev) => prev.filter((x) => x.id !== rejectingItem.id));
+      await rejectPost(rejectingItem.postId, rejectReason);
+      await markAdminNotificationRead(rejectingItem.id);
       Alert.alert('Sukces', 'Post odrzucony.');
       closeRejectModal();
-      fetchPosts(); // Refresh list
     } catch (error) {
       console.error(error);
+      setItems((prev) => (rejectingItem ? [rejectingItem, ...prev] : prev));
       Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się odrzucić posta.'));
     } finally {
       setRejectSubmitting(false);
     }
   };
 
-  const renderItem = ({ item }: { item: Post }) => (
-    <View style={styles.postContainer}>
-      <View style={styles.rowTop}>
-        <Text style={styles.authorId}>Autor ID: {item.authorId}</Text>
-        <PostStatusBadge status={item.status} compact />
-      </View>
-      <Text style={styles.content}>{item.text}</Text>
-
-      {item.photoUrl && <Image source={{ uri: item.photoUrl }} style={styles.postImage} />}
-
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.button, styles.rejectButton]}
-          onPress={() => openRejectModal(item.id)}
-        >
-          <Text style={styles.buttonText}>Odrzuć</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.approveButton]}
-          onPress={() => handleApprove(item.id)}
-        >
-          <Text style={styles.buttonText}>Zatwierdź</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Moderacja ({posts.length})</Text>
+        <Text style={styles.title}>Moderacja ({items.length})</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.inboxBtn} onPress={() => router.push('/admin/inbox')}>
             <Text style={styles.inboxText}>Inbox</Text>
@@ -143,7 +180,12 @@ export default function ModerationScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity onPress={fetchPosts}>
+          <TouchableOpacity
+            onPress={() => {
+              setPostById({});
+              setReloadKey((x) => x + 1);
+            }}
+          >
             <Text style={styles.refreshText}>Odśwież</Text>
           </TouchableOpacity>
         </View>
@@ -187,23 +229,94 @@ export default function ModerationScreen() {
                   : 'Coś poszło nie tak'
           }
           description={mapFirestoreErrorToMessage(error, 'Nie udało się pobrać postów do moderacji.')}
-          onRetry={fetchPosts}
+          onRetry={() => {
+            setPostById({});
+            setReloadKey((x) => x + 1);
+          }}
         />
       ) : (
         <FlatList
-          data={posts}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          data={items}
+          keyExtractor={(x) => x.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <EmptyState
               title="Brak postów"
               description="Brak postów oczekujących na ręczną moderację."
               icon="checkmark-done-outline"
-              actionLabel="Odśwież"
-              onAction={fetchPosts}
             />
           }
+          renderItem={({ item }) => {
+            const p = postById[item.postId];
+            const ai = formatAiReason(item);
+            const busy = actionPostId === item.postId || rejectSubmitting;
+            const dateLabel = formatTimestampDate(item.createdAt, 'Teraz');
+            return (
+              <View style={styles.postContainer}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.cardTitle}>Do ręcznej moderacji</Text>
+                  <Text style={styles.cardSub}>{dateLabel}</Text>
+                </View>
+
+                {ai.score || ai.categories ? (
+                  <View style={styles.aiBox}>
+                    <Text style={styles.aiTitle}>Dlaczego AI zostawiło do review</Text>
+                    {ai.score ? <Text style={styles.aiText}>{ai.score}</Text> : null}
+                    {ai.categories ? <Text style={styles.aiText}>{ai.categories}</Text> : null}
+                  </View>
+                ) : null}
+
+                {!p ? (
+                  <View>
+                    <SkeletonBlock height={14} width={'92%'} radius={7} />
+                    <View style={{ height: 8 }} />
+                    <SkeletonBlock height={14} width={'84%'} radius={7} />
+                    <View style={{ height: 10 }} />
+                    <SkeletonBlock height={180} width={'100%'} radius={10} />
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={styles.previewText} numberOfLines={5}>
+                      {p.text}
+                    </Text>
+                    {p.photoUrl ? <Image source={{ uri: p.photoUrl }} style={styles.postImage} resizeMode="cover" /> : null}
+                  </View>
+                )}
+
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.rejectButton, busy && styles.disabledButton]}
+                    onPress={() => openRejectModal(item)}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.approveButton, busy && styles.disabledButton]}
+                    onPress={() => handleApprove(item)}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Approve</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.bottomRow}>
+                  <TouchableOpacity onPress={() => router.push(`/post/${item.postId}`)}>
+                    <Text style={styles.link}>Otwórz szczegóły posta</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      // optimistic remove + mark read
+                      setItems((prev) => prev.filter((x) => x.id !== item.id));
+                      markAdminNotificationRead(item.id).catch((e) => console.warn('markAdminNotificationRead failed', e));
+                    }}
+                  >
+                    <Text style={styles.linkMuted}>Oznacz jako przeczytane</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }}
         />
       )}
 
@@ -301,6 +414,61 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 10,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#111',
+  },
+  cardSub: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  aiBox: {
+    marginTop: 10,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 149, 0, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.25)',
+    borderRadius: 12,
+    padding: 10,
+  },
+  aiTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#6b3f00',
+    marginBottom: 6,
+  },
+  aiText: {
+    fontSize: 12,
+    color: '#333',
+    lineHeight: 17,
+    marginBottom: 3,
+  },
+  previewText: {
+    fontSize: 14,
+    color: '#222',
+    lineHeight: 20,
+  },
+  bottomRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  link: {
+    color: '#007AFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  linkMuted: {
+    color: '#666',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   postContainer: {
     backgroundColor: '#fff',

@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   addComment,
@@ -63,6 +64,10 @@ export default function FeedScreen() {
   const [expandedCommentsLoading, setExpandedCommentsLoading] = useState(false);
   const [commentInput, setCommentInput] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  // Like micro-interaction (single animated value is enough; we only "pop" the latest pressed post)
+  const likeAnim = useRef(new Animated.Value(1)).current;
+  const [likeAnimPostId, setLikeAnimPostId] = useState<string | null>(null);
 
   // --- Notifications (in-app, no push) ---
   const [notifVisible, setNotifVisible] = useState(false);
@@ -241,6 +246,15 @@ export default function FeedScreen() {
       return;
     }
 
+    // micro-interaction: haptic + pop
+    setLikeAnimPostId(post.id);
+    likeAnim.setValue(1);
+    Animated.sequence([
+      Animated.timing(likeAnim, { toValue: 1.12, duration: 90, useNativeDriver: true }),
+      Animated.timing(likeAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
     try {
       const liked = await toggleLike(post.id, user.uid);
 
@@ -366,7 +380,9 @@ export default function FeedScreen() {
         <View style={styles.footer}>
           <View style={styles.interactions}>
             <TouchableOpacity style={styles.interactionButton} onPress={() => handleLike(item)}>
-              <Ionicons name="heart-outline" size={24} color="#333" />
+              <Animated.View style={{ transform: [{ scale: item.id === likeAnimPostId ? likeAnim : 1 }] }}>
+                <Ionicons name="heart-outline" size={24} color="#333" />
+              </Animated.View>
               <Text style={styles.interactionText}>{item.likeCount || 0}</Text>
             </TouchableOpacity>
 
@@ -633,7 +649,7 @@ export default function FeedScreen() {
                   };
 
                   return (
-                    <TouchableOpacity style={styles.notifRow} onPress={onPress}>
+                    <TouchableOpacity style={[styles.notifRow, n.read && { opacity: 0.68 }]} onPress={onPress}>
                       <View style={styles.notifAvatar} />
                       <View style={styles.notifBody}>
                         <Text style={[styles.notifText, !n.read && styles.notifTextUnread]} numberOfLines={2}>

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { router, useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '../../src/context/auth';
 import { createPost } from '../../src/services/posts';
 import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
@@ -110,6 +111,7 @@ export default function CreateScreen() {
         text: content,
         imageUri: image,
       });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setSuccess(true);
       setContent('');
       setImage(null);
