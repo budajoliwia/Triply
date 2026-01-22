@@ -1,19 +1,29 @@
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { moderateTextWithOpenAI, type AiModerationDecision } from '../services/aiPostModeration';
+import { getStorage } from 'firebase-admin/storage';
+import {
+  moderateImageWithOpenAI,
+  moderateTextWithOpenAI,
+  type AiModerationDecision,
+  type AiModerationResult,
+} from '../services/aiPostModeration';
 
 const db = getFirestore();
+const storage = getStorage();
 
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value ? value : null;
-}
-
-function hasCheckedAt(data: Record<string, unknown>): boolean {
+function hasTextCheckedAt(data: Record<string, unknown>): boolean {
   const moderation = data.moderation;
   if (!moderation || typeof moderation !== 'object') return false;
-  const checkedAt = (moderation as Record<string, unknown>).checkedAt;
-  return !!checkedAt;
+  return !!(moderation as Record<string, unknown>).checkedAt;
+}
+
+function hasImageCheckedAt(data: Record<string, unknown>): boolean {
+  const moderation = data.moderation;
+  if (!moderation || typeof moderation !== 'object') return false;
+  const image = (moderation as Record<string, unknown>).image;
+  if (!image || typeof image !== 'object') return false;
+  return !!(image as Record<string, unknown>).checkedAt;
 }
 
 function asPostStatus(value: unknown): 'draft' | 'pending' | 'approved' | 'rejected' | null {
@@ -32,6 +42,97 @@ function outcomeEventType(decision: AiModerationDecision): 'ai_approved' | 'ai_f
   return 'ai_flagged';
 }
 
+function combineDecisions(params: {
+  textDecision: AiModerationDecision;
+  imageDecision: AiModerationDecision | null;
+}): AiModerationDecision {
+  const { textDecision, imageDecision } = params;
+  if (textDecision === 'BLOCK' || imageDecision === 'BLOCK') return 'BLOCK';
+  if (textDecision === 'REVIEW' || imageDecision === 'REVIEW') return 'REVIEW';
+  return 'ALLOW';
+}
+
+function asDecision(value: unknown): AiModerationDecision | null {
+  if (value === 'ALLOW' || value === 'REVIEW' || value === 'BLOCK') return value;
+  return null;
+}
+
+function deriveStoragePathFromUrl(url: string): string | null {
+  // Try to handle:
+  // - gs://bucket/path
+  // - https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?...
+  // - https://storage.googleapis.com/{bucket}/{path}
+  try {
+    if (url.startsWith('gs://')) {
+      const without = url.slice('gs://'.length);
+      const slash = without.indexOf('/');
+      if (slash >= 0) return without.slice(slash + 1);
+      return null;
+    }
+
+    const u = new URL(url);
+    if (u.hostname === 'firebasestorage.googleapis.com') {
+      const parts = u.pathname.split('/');
+      // /v0/b/{bucket}/o/{object}
+      const oIndex = parts.indexOf('o');
+      if (oIndex >= 0 && parts[oIndex + 1]) {
+        return decodeURIComponent(parts[oIndex + 1]);
+      }
+    }
+    if (u.hostname === 'storage.googleapis.com') {
+      // /{bucket}/{path...}
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2) return parts.slice(1).join('/');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractPhotoStoragePath(data: Record<string, unknown>): string | null {
+  // Preferred: photoPath (legacy) or photo.displayPath (current)
+  const photoPath = typeof (data as any).photoPath === 'string' ? ((data as any).photoPath as string) : null;
+  if (photoPath && photoPath.trim()) return photoPath.trim();
+
+  const photo = (data as any).photo;
+  const displayPath = typeof photo?.displayPath === 'string' ? (photo.displayPath as string) : null;
+  if (displayPath && displayPath.trim()) return displayPath.trim();
+
+  // Fallback: try to derive from photoUrl if it exists on doc
+  const photoUrl = typeof (data as any).photoUrl === 'string' ? ((data as any).photoUrl as string) : null;
+  if (photoUrl && photoUrl.trim()) return deriveStoragePathFromUrl(photoUrl.trim());
+
+  return null;
+}
+
+async function loadImageBufferFromStorage(storagePath: string): Promise<
+  | { kind: 'ok'; buffer: Buffer; mimeType: string; sizeBytes: number }
+  | { kind: 'review'; reason: 'missing' | 'too_large' | 'invalid' }
+> {
+  const path = (storagePath ?? '').trim();
+  if (!path) return { kind: 'review', reason: 'invalid' };
+
+  const file = storage.bucket().file(path);
+  try {
+    const [meta] = await file.getMetadata();
+    const sizeBytes = Number(meta.size ?? 0);
+    const mimeType = typeof meta.contentType === 'string' && meta.contentType ? meta.contentType : 'image/jpeg';
+
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return { kind: 'review', reason: 'invalid' };
+    if (sizeBytes > MAX_BYTES) return { kind: 'review', reason: 'too_large' };
+
+    const [buf] = await file.download();
+    return { kind: 'ok', buffer: buf as Buffer, mimeType, sizeBytes };
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? '';
+    const notFoundLike = msg.includes('No such object') || msg.includes('Not Found') || msg.includes('404');
+    if (notFoundLike) return { kind: 'review', reason: 'missing' };
+    throw e;
+  }
+}
+
 async function moderatePostIfNeeded(params: {
   postId: string;
   eventId: string;
@@ -41,22 +142,63 @@ async function moderatePostIfNeeded(params: {
 
   const status = asPostStatus(afterData.status);
   if (status !== 'pending') return;
-  if (hasCheckedAt(afterData)) return;
 
   const text = typeof afterData.text === 'string' ? afterData.text : '';
   const title = typeof afterData.title === 'string' ? afterData.title : null; // optional (not in shared model)
 
-  let moderationResult: Awaited<ReturnType<typeof moderateTextWithOpenAI>>;
+  const hasImage = !!extractPhotoStoragePath(afterData);
+  const needText = !hasTextCheckedAt(afterData);
+  const needImage = hasImage && !hasImageCheckedAt(afterData);
+  if (!needText && !needImage) return;
+
+  let textResult: AiModerationResult | null = null;
+  let imageResult: AiModerationResult | null = null;
+  let imageRejectionReason: string | null = null;
+
   try {
-    moderationResult = await moderateTextWithOpenAI({ title, text });
+    if (needText) {
+      textResult = await moderateTextWithOpenAI({ title, text });
+    }
+
+    if (needImage) {
+      const storagePath = extractPhotoStoragePath(afterData);
+      if (!storagePath) {
+        imageResult = {
+          decision: 'REVIEW',
+          score: 0.5,
+          categories: { nudity: 0, violence: 0, guardrail_missing_path: 1 },
+          modelVersion: `guardrail@postmod-v1`,
+        };
+      } else {
+        const loaded = await loadImageBufferFromStorage(storagePath);
+        if (loaded.kind === 'review') {
+          logger.warn('[aiModeration][image] guardrail_review', { postId, eventId, storagePath, reason: loaded.reason });
+          imageResult = {
+            decision: 'REVIEW',
+            score: 0.5,
+            categories: {
+              nudity: 0,
+              violence: 0,
+              ...(loaded.reason === 'missing' ? { guardrail_missing_file: 1 } : {}),
+              ...(loaded.reason === 'too_large' ? { guardrail_too_large: 1 } : {}),
+              ...(loaded.reason === 'invalid' ? { guardrail_invalid_file: 1 } : {}),
+            },
+            modelVersion: `guardrail@postmod-v1`,
+          };
+        } else {
+          imageResult = await moderateImageWithOpenAI({ imageBuffer: loaded.buffer, mimeType: loaded.mimeType });
+          imageRejectionReason = imageResult.rejectionReason ?? null;
+        }
+      }
+    }
   } catch (error) {
     // Fail-safe: never auto-approve on error/timeout; leave as pending.
-    logger.error('[aiModeration][trigger] openai_failed', { postId, eventId, error });
+    logger.error('[aiModeration][trigger] moderation_failed', { postId, eventId, error });
     return;
   }
 
   const startedDocId = deterministicEventId(eventId, 'ai_review_started');
-  const outcomeDocId = deterministicEventId(eventId, outcomeEventType(moderationResult.decision));
+  // outcome decided in transaction using current+new results.
   const actorId = 'system';
 
   try {
@@ -68,31 +210,69 @@ async function moderatePostIfNeeded(params: {
       const current = postSnap.data() as Record<string, unknown>;
       const currentStatus = asPostStatus(current.status);
       if (currentStatus !== 'pending') return;
-      if (hasCheckedAt(current)) return; // idempotent: already moderated
 
-      const decision = moderationResult.decision;
+      const currentTextDecision = asDecision((current as any)?.moderation?.decision) ?? 'REVIEW';
+      const currentImageDecision = asDecision((current as any)?.moderation?.image?.decision);
+
+      const stillNeedText = !hasTextCheckedAt(current);
+      const currentHasImage = !!extractPhotoStoragePath(current);
+      const stillNeedImage = currentHasImage && !hasImageCheckedAt(current);
+
+      // Nothing to do (can happen on retries / races). Avoid extra writes/events.
+      if (!stillNeedText && !stillNeedImage) return;
+
+      // If something already ran, avoid overwriting those results.
+      if (stillNeedText && !textResult) return;
+      if (stillNeedImage && !imageResult) return;
+
+      const finalTextDecision = stillNeedText ? (textResult!.decision as AiModerationDecision) : currentTextDecision;
+      const finalImageDecision = currentHasImage
+        ? stillNeedImage
+          ? (imageResult!.decision as AiModerationDecision)
+          : currentImageDecision ?? 'REVIEW'
+        : null;
+
+      const combinedDecision = combineDecisions({ textDecision: finalTextDecision, imageDecision: finalImageDecision });
+
       const updates: Record<string, unknown> = {
         autoModerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        moderation: {
-          decision,
-          score: moderationResult.score,
-          categories: moderationResult.categories,
-          checkedAt: FieldValue.serverTimestamp(),
-          modelVersion: moderationResult.modelVersion,
-        },
       };
 
-      if (decision === 'ALLOW') {
+      // Only set fields that are missing (idempotent / no loops).
+      if (stillNeedText && textResult) {
+        updates['moderation.decision'] = textResult.decision;
+        updates['moderation.score'] = textResult.score;
+        updates['moderation.categories'] = textResult.categories;
+        updates['moderation.checkedAt'] = FieldValue.serverTimestamp();
+        updates['moderation.modelVersion'] = textResult.modelVersion;
+      }
+
+      if (stillNeedImage && imageResult) {
+        updates['moderation.image.decision'] = imageResult.decision;
+        updates['moderation.image.score'] = imageResult.score;
+        updates['moderation.image.categories'] = imageResult.categories;
+        updates['moderation.image.checkedAt'] = FieldValue.serverTimestamp();
+        updates['moderation.image.modelVersion'] = imageResult.modelVersion;
+      }
+
+      if (combinedDecision === 'ALLOW') {
         updates.status = 'approved';
         updates.rejectionReason = FieldValue.delete();
-      } else if (decision === 'BLOCK') {
+      } else if (combinedDecision === 'BLOCK') {
         updates.status = 'rejected';
-        updates.rejectionReason = moderationResult.rejectionReason?.slice(0, 240) ?? 'Treść narusza zasady społeczności.';
+        const reason =
+          (finalImageDecision === 'BLOCK' ? imageRejectionReason : null) ??
+          (finalTextDecision === 'BLOCK' ? 'Treść narusza zasady społeczności.' : null) ??
+          'Treść narusza zasady społeczności.';
+        updates.rejectionReason = reason.slice(0, 240);
       } else {
         // REVIEW: keep pending
         updates.status = 'pending';
       }
+
+      const outcomeType = outcomeEventType(combinedDecision);
+      const outcomeDocId = deterministicEventId(eventId, outcomeType);
 
       const eventsCol = postRef.collection('postEvents');
       const startedRef = eventsCol.doc(startedDocId);
@@ -100,7 +280,7 @@ async function moderatePostIfNeeded(params: {
 
       // Idempotent: use deterministic IDs (set overwrites on retry).
       t.set(startedRef, { type: 'ai_review_started', actorId, createdAt: FieldValue.serverTimestamp() }, { merge: false });
-      t.set(outcomeRef, { type: outcomeEventType(decision), actorId, createdAt: FieldValue.serverTimestamp() }, { merge: false });
+      t.set(outcomeRef, { type: outcomeType, actorId, createdAt: FieldValue.serverTimestamp() }, { merge: false });
 
       t.update(postRef, updates);
     });
@@ -108,13 +288,12 @@ async function moderatePostIfNeeded(params: {
     logger.info('[aiModeration] applied', {
       postId,
       eventId,
-      decision: moderationResult.decision,
-      score: moderationResult.score,
-      modelVersion: moderationResult.modelVersion,
+      textDecision: textResult?.decision ?? 'skipped',
+      imageDecision: imageResult?.decision ?? 'skipped',
     });
   } catch (error) {
     // Fail-safe: leave post as pending (transaction failed means no post change).
-    logger.error('[aiModeration] transaction_failed', { postId, eventId, decision: moderationResult.decision, error });
+    logger.error('[aiModeration] transaction_failed', { postId, eventId, error });
   }
 }
 

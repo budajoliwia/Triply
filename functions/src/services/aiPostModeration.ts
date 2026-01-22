@@ -96,6 +96,54 @@ function buildSystemPrompt(): string {
   ].join('\n');
 }
 
+function buildImageSystemPrompt(): string {
+  return [
+    'Jesteś systemem moderacji treści dla aplikacji społecznościowej.',
+    'Oceń tylko OBRAZ. Skup się wyłącznie na:',
+    '- nagości/treściach seksualnych (NSFW)',
+    '- przemocy/drastycznych scenach (gore)',
+    '',
+    'Nie oceniaj spamu ani tekstu na obrazie jako spamu.',
+    '',
+    'Zwróć WYŁĄCZNIE poprawny JSON o strukturze:',
+    '{',
+    '  "decision": "ALLOW" | "REVIEW" | "BLOCK",',
+    '  "score": number,',
+    '  "categories": { "nudity": number, "violence": number, ... },',
+    '  "rejectionReasonPL": string',
+    '}',
+    '',
+    'Wymagania:',
+    '- decision: ALLOW jeśli bezpieczne; BLOCK jeśli jednoznacznie NSFW lub przemoc/gore; REVIEW jeśli niepewne.',
+    '- score: 0..1 (pewność decyzji).',
+    '- categories: mapuj co najmniej "nudity" i "violence" na 0..1.',
+    '- rejectionReasonPL: tylko dla BLOCK. Krótki, przyjazny komunikat po polsku (max 240 znaków), bez cytowania obrazu.',
+    '- Jeśli masz wątpliwości, wybierz REVIEW (nie ALLOW).',
+  ].join('\n');
+}
+
+function getFetchWithTimeout(timeoutMs: number): {
+  fetchFn: (input: any, init?: any) => Promise<any>;
+  controller: any | null;
+  timeoutHandle: ReturnType<typeof setTimeout>;
+} {
+  const fetchFn = (globalThis as any).fetch as (input: any, init?: any) => Promise<any>;
+  if (typeof fetchFn !== 'function') throw new Error('global fetch is not available (Node 20 required)');
+
+  const AbortControllerCtor = (globalThis as any).AbortController as any;
+  const controller = AbortControllerCtor ? new AbortControllerCtor() : null;
+
+  const timeoutHandle = setTimeout(() => {
+    try {
+      controller?.abort?.();
+    } catch {
+      // ignore
+    }
+  }, timeoutMs);
+
+  return { fetchFn, controller, timeoutHandle };
+}
+
 /**
  * Calls OpenAI to classify text into ALLOW / REVIEW / BLOCK.
  * Throws on any error. Caller must ensure fail-safe behavior (never auto-approve on error).
@@ -112,11 +160,7 @@ export async function moderateTextWithOpenAI(params: {
   const modelVersion = `${model}@${PROMPT_VERSION}`;
 
   // TS note: functions tsconfig doesn't include DOM libs; keep fetch/AbortController as any.
-  const fetchFn = (globalThis as any).fetch as (input: any, init?: any) => Promise<any>;
-  if (typeof fetchFn !== 'function') throw new Error('global fetch is not available (Node 20 required)');
-
-  const AbortControllerCtor = (globalThis as any).AbortController as any;
-  const controller = AbortControllerCtor ? new AbortControllerCtor() : null;
+  const { fetchFn, controller, timeoutHandle } = getFetchWithTimeout(REQUEST_TIMEOUT_MS);
 
   const inputText = buildInputText(params);
   const systemPrompt = buildSystemPrompt();
@@ -130,14 +174,6 @@ export async function moderateTextWithOpenAI(params: {
       { role: 'user', content: inputText },
     ],
   };
-
-  const timeout = setTimeout(() => {
-    try {
-      controller?.abort?.();
-    } catch {
-      // ignore
-    }
-  }, REQUEST_TIMEOUT_MS);
 
   try {
     const resp = await fetchFn(OPENAI_API_URL, {
@@ -197,7 +233,108 @@ export async function moderateTextWithOpenAI(params: {
     });
     throw error;
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeoutHandle);
+  }
+}
+
+/**
+ * Calls OpenAI vision to classify image into ALLOW / REVIEW / BLOCK for:
+ * - nudity / sexual content
+ * - violence / gore
+ *
+ * Throws on any error. Caller must ensure fail-safe behavior (never auto-approve on error).
+ */
+export async function moderateImageWithOpenAI(params: {
+  imageBuffer: Buffer;
+  mimeType: string;
+}): Promise<AiModerationResult> {
+  const apiKey = asNonEmptyString(process.env.OPENAI_API_KEY);
+  const model = asNonEmptyString(process.env.AI_MODERATION_MODEL);
+  if (!apiKey) throw new Error('OPENAI_API_KEY is missing');
+  if (!model) throw new Error('AI_MODERATION_MODEL is missing');
+
+  const modelVersion = `${model}@${PROMPT_VERSION}`;
+  const { fetchFn, controller, timeoutHandle } = getFetchWithTimeout(REQUEST_TIMEOUT_MS);
+
+  const mimeType = asNonEmptyString(params.mimeType) ?? 'image/jpeg';
+  const base64 = params.imageBuffer.toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
+  const systemPrompt = buildImageSystemPrompt();
+
+  const body = {
+    model,
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Oceń ten obraz.' },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const resp = await fetchFn(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+
+    const respText = await resp.text();
+    if (!resp.ok) {
+      logger.error('[aiModeration][openai:image] non_200', { status: resp.status, body: respText?.slice?.(0, 2000) });
+      throw new Error(`OpenAI error: ${resp.status}`);
+    }
+
+    const respJson = safeJsonParse(respText) as any;
+    const content = respJson?.choices?.[0]?.message?.content;
+    const contentStr = typeof content === 'string' ? content : '';
+    const parsed = safeJsonParse(contentStr) as any;
+
+    const decision = asDecision(parsed?.decision);
+    const score = clamp01(typeof parsed?.score === 'number' ? parsed.score : 0);
+    const categories = asCategories(parsed?.categories);
+    const rejectionReasonRaw = asNonEmptyString(parsed?.rejectionReasonPL);
+
+    if (!decision) {
+      logger.error('[aiModeration][parse:image] invalid_decision', { content: contentStr?.slice?.(0, 2000) });
+      throw new Error('Invalid image moderation decision');
+    }
+
+    return {
+      decision,
+      score,
+      categories,
+      modelVersion,
+      ...(decision === 'BLOCK'
+        ? {
+            rejectionReason: (rejectionReasonRaw ?? 'Zdjęcie narusza zasady społeczności.').slice(0, 240),
+          }
+        : {}),
+    };
+  } catch (error) {
+    const message = (error as { message?: string })?.message ?? 'unknown';
+    const isTimeoutLike =
+      message.includes('AbortError') ||
+      message.toLowerCase().includes('timeout') ||
+      message.toLowerCase().includes('aborted');
+    logger.error('[aiModeration][image] failed', {
+      modelVersion,
+      isTimeoutLike,
+      error,
+    });
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 }
 

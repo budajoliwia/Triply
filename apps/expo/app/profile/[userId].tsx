@@ -178,7 +178,7 @@ export default function PublicProfileScreen() {
             <Text style={styles.statLabel}>Obserwuje</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{posts.length}</Text>
+            <Text style={styles.statValue}>{posts.filter((p) => p.status === 'approved').length}</Text>
             <Text style={styles.statLabel}>Posty</Text>
           </View>
         </View>
