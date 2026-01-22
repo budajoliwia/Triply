@@ -20,6 +20,7 @@ import { useAuth } from '../src/context/auth';
 import { db } from '../src/firebase/client';
 import { Avatar } from '../src/components/Avatar';
 import { resolveAvatarUrl, updateMyProfile } from '../src/services/users';
+import { mapFirestoreErrorToMessage } from '../src/utils/firestoreErrors';
 
 const BIO_MAX = 160;
 
@@ -128,11 +129,7 @@ export default function EditProfileScreen() {
     } catch (e) {
       const code = (e as { code?: string })?.code;
       console.error('Failed to save profile:', code, e);
-      if (code === 'permission-denied') {
-        Alert.alert('Błąd', 'Brak uprawnień do zapisu (rules).');
-      } else {
-        Alert.alert('Błąd', 'Nie udało się zapisać profilu.');
-      }
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się zapisać profilu.'));
     } finally {
       setSaving(false);
     }

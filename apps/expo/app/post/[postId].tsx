@@ -29,6 +29,8 @@ import {
   type PostEvent,
 } from '../../src/services/posts';
 import { Avatar } from '../../src/components/Avatar';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { formatTimestampDate } from '../../src/utils/time';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -85,7 +87,7 @@ export default function PostDetailsScreen() {
       setComments(list);
     } catch (e) {
       console.error(e);
-      Alert.alert('Błąd', 'Nie udało się pobrać komentarzy.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się pobrać komentarzy.'));
     } finally {
       setCommentsLoading(false);
     }
@@ -145,7 +147,7 @@ export default function PostDetailsScreen() {
       });
     } catch (e) {
       console.error(e);
-      Alert.alert('Błąd', 'Nie udało się polubić posta.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się polubić posta.'));
     } finally {
       setLikeUpdating(false);
     }
@@ -168,7 +170,7 @@ export default function PostDetailsScreen() {
     } catch (error) {
       const code = (error as { code?: string })?.code;
       console.error('Error adding comment:', code, error);
-      Alert.alert('Błąd', 'Nie udało się dodać komentarza.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się dodać komentarza.'));
     } finally {
       setSubmitting(false);
     }
@@ -191,7 +193,7 @@ export default function PostDetailsScreen() {
             setPost((prev) => (prev ? { ...prev, commentCount: Math.max(0, (prev.commentCount || 0) - 1) } : prev));
           } catch (e) {
             console.error(e);
-            Alert.alert('Błąd', 'Nie udało się usunąć komentarza.');
+            Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się usunąć komentarza.'));
           }
         },
       },
@@ -251,9 +253,7 @@ export default function PostDetailsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.username}>{post.authorName || 'Użytkownik'}</Text>
                 <Text style={styles.time}>
-                  {post.createdAt?.seconds
-                    ? new Date(post.createdAt.seconds * 1000).toLocaleDateString()
-                    : 'Teraz'}
+                  {formatTimestampDate(post.createdAt, 'Teraz')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -342,7 +342,7 @@ export default function PostDetailsScreen() {
                   <Text style={styles.commentAuthor}>{item.authorName || 'Użytkownik'}</Text>
                 </TouchableOpacity>
                 <Text style={styles.commentTime}>
-                  {item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'Teraz'}
+                  {formatTimestampDate(item.createdAt, 'Teraz')}
                 </Text>
               </View>
               <Text style={styles.commentText}>{item.text}</Text>

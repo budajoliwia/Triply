@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { getPosts, approvePost, rejectPost, Post } from '../../src/services/posts';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 export default function ModerationScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -31,7 +32,7 @@ export default function ModerationScreen() {
       setPosts(pendingPosts);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się pobrać postów do moderacji.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się pobrać postów do moderacji.'));
     } finally {
       setLoading(false);
     }
@@ -47,7 +48,8 @@ export default function ModerationScreen() {
       Alert.alert('Sukces', 'Post zatwierdzony.');
       fetchPosts(); // Refresh list
     } catch (error) {
-      Alert.alert('Błąd', 'Nie udało się zatwierdzić posta.');
+      console.error(error);
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się zatwierdzić posta.'));
     }
   };
 
@@ -75,7 +77,7 @@ export default function ModerationScreen() {
       fetchPosts(); // Refresh list
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się odrzucić posta.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się odrzucić posta.'));
     } finally {
       setRejectSubmitting(false);
     }

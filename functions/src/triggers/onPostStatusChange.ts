@@ -1,10 +1,9 @@
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as logger from 'firebase-functions/logger';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import type { PostStatus } from '@triply/shared/src/models';
 
 const db = getFirestore();
-
-type PostStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
@@ -39,10 +38,12 @@ export const onPostCreatedWriteEvents = onDocumentCreated('posts/{postId}', asyn
 
   try {
     await addPostEvent({ postId, type: 'created', actorId: authorId });
+    logger.info('[postEvents][created] ok', { postId, actorId: authorId, status });
 
     // Current client creates posts directly as `pending`, so treat that as a submission too.
     if (status === 'pending') {
       await addPostEvent({ postId, type: 'submitted', actorId: authorId });
+      logger.info('[postEvents][submitted] ok', { postId, actorId: authorId, statusFrom: null, statusTo: 'pending' });
     }
   } catch (error) {
     logger.error('[postEvents][create] failed', { postId, error });
@@ -69,8 +70,9 @@ export const onPostWrittenWriteSubmittedEvent = onDocumentWritten('posts/{postId
     const actorId = asString(afterData.authorId) ?? 'system';
     try {
       await addPostEvent({ postId, type: 'submitted', actorId });
+      logger.info('[postEvents][submitted] ok', { postId, actorId, statusFrom: beforeStatus, statusTo: afterStatus });
     } catch (error) {
-      logger.error('[postEvents][submitted] failed', { postId, error });
+      logger.error('[postEvents][submitted] failed', { postId, actorId, statusFrom: beforeStatus, statusTo: afterStatus, error });
       throw error; // retry
     }
   }

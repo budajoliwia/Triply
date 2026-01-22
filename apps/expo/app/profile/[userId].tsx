@@ -24,6 +24,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../src/firebase/client';
 import { Avatar } from '../../src/components/Avatar';
 import { getDownloadUrlCached } from '../../src/firebase/storage';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -138,7 +139,7 @@ export default function PublicProfileScreen() {
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
-      Alert.alert('Błąd', 'Nie udało się zmienić statusu obserwowania.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się zmienić statusu obserwowania.'));
     } finally {
       setActionLoading(false);
     }

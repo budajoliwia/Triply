@@ -15,9 +15,12 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { getComments, addComment, deleteComment, Comment } from '../../src/services/posts';
+import type { DocumentSnapshot } from 'firebase/firestore';
+import { getCommentsPage, addComment, deleteComment, Comment } from '../../src/services/posts';
 import { useAuth } from '../../src/context/auth';
 import { Avatar } from '../../src/components/Avatar';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { formatTimestampDate } from '../../src/utils/time';
 
 export default function CommentsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -29,19 +32,27 @@ export default function CommentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [inputText, setInputText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    fetchComments();
+    fetchCommentsFirstPage();
   }, [postId]);
 
-  const fetchComments = async () => {
+  const fetchCommentsFirstPage = async () => {
     if (!postId) return;
     try {
-      const fetchedComments = await getComments(postId);
-      setComments(fetchedComments);
+      setHasMore(true);
+      setLastDoc(null);
+      const { comments: pageComments, lastDoc: nextLastDoc, hasMore: nextHasMore } =
+        await getCommentsPage(postId, { limit: 20, lastDoc: null });
+      setComments(pageComments);
+      setLastDoc(nextLastDoc);
+      setHasMore(nextHasMore);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się pobrać komentarzy.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się pobrać komentarzy.'));
     } finally {
       setLoading(false);
     }
@@ -51,9 +62,39 @@ export default function CommentsScreen() {
     if (!postId) return;
     setRefreshing(true);
     try {
-      await fetchComments();
+      await fetchCommentsFirstPage();
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const loadMoreComments = async () => {
+    if (!postId) return;
+    if (loading || refreshing) return;
+    if (loadingMore) return;
+    if (!hasMore) return;
+    if (!lastDoc) return;
+
+    setLoadingMore(true);
+    try {
+      const { comments: pageComments, lastDoc: nextLastDoc, hasMore: nextHasMore } =
+        await getCommentsPage(postId, { limit: 20, lastDoc });
+
+      setComments((current) => {
+        if (pageComments.length === 0) return current;
+        const seen = new Set(current.map((c) => c.id));
+        const deduped = pageComments.filter((c) => !seen.has(c.id));
+        return deduped.length ? [...current, ...deduped] : current;
+      });
+
+      setLastDoc(nextLastDoc);
+      setHasMore(nextHasMore);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się pobrać kolejnych komentarzy.'));
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -69,10 +110,10 @@ export default function CommentsScreen() {
     try {
       await addComment(postId!, user.uid, inputText.trim());
       setInputText('');
-      await fetchComments(); // Refresh list
+      await fetchCommentsFirstPage(); // Refresh list
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się dodać komentarza.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się dodać komentarza.'));
     } finally {
       setSubmitting(false);
     }
@@ -87,11 +128,11 @@ export default function CommentsScreen() {
         onPress: async () => {
           try {
             await deleteComment(postId!, commentId);
-            await fetchComments(); // Refresh list
+            await fetchCommentsFirstPage(); // Refresh list
             Alert.alert('Sukces', 'Komentarz został usunięty.');
           } catch (error) {
             console.error(error);
-            Alert.alert('Błąd', 'Nie udało się usunąć komentarza.');
+            Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się usunąć komentarza.'));
           }
         },
       },
@@ -113,9 +154,7 @@ export default function CommentsScreen() {
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
           </TouchableOpacity>
           <Text style={styles.timestamp}>
-            {item.createdAt?.seconds
-              ? new Date(item.createdAt.seconds * 1000).toLocaleDateString()
-              : 'Teraz'}
+            {formatTimestampDate(item.createdAt, 'Teraz')}
           </Text>
         </View>
         <Text style={styles.commentText}>{item.text}</Text>
@@ -149,6 +188,15 @@ export default function CommentsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator size="small" color="#007AFF" style={styles.loadMoreSpinner} />
+          ) : hasMore && comments.length > 0 ? (
+            <TouchableOpacity style={styles.loadMoreButton} onPress={loadMoreComments}>
+              <Text style={styles.loadMoreText}>Załaduj więcej komentarzy</Text>
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
@@ -294,6 +342,23 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#ccc',
+  },
+  loadMoreButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#f0f0f0',
+  },
+  loadMoreText: {
+    color: '#007AFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  loadMoreSpinner: {
+    marginTop: 10,
+    marginBottom: 6,
   },
 });
 

@@ -16,7 +16,7 @@ export const onLikeCreated = onDocumentCreated('posts/{postId}/likes/{userId}', 
     await postRef.update({
       likeCount: FieldValue.increment(1),
     });
-    logger.info(`Incremented likeCount for post ${postId}`);
+    logger.info('[posts][likeCount] increment', { postId, actorId: likerUid, delta: 1, eventId: event.id });
 
     // Create notification for post author (unless self-like)
     try {
@@ -44,21 +44,22 @@ export const onLikeCreated = onDocumentCreated('posts/{postId}/likes/{userId}', 
       // do not throw: likeCount increment already done, and we prefer not retrying just for notification.
     }
   } catch (error) {
-    logger.error(`Error incrementing likeCount for post ${postId}`, error);
+    logger.error('[posts][likeCount] increment_failed', { postId, actorId: likerUid, delta: 1, eventId: event.id, error });
   }
 });
 
 export const onLikeDeleted = onDocumentDeleted('posts/{postId}/likes/{userId}', async (event) => {
   const postId = event.params.postId;
+  const likerUid = event.params.userId;
   const postRef = db.collection('posts').doc(postId);
 
   try {
     await postRef.update({
       likeCount: FieldValue.increment(-1),
     });
-    logger.info(`Decremented likeCount for post ${postId}`);
+    logger.info('[posts][likeCount] decrement', { postId, actorId: likerUid, delta: -1, eventId: event.id });
   } catch (error) {
-    logger.error(`Error decrementing likeCount for post ${postId}`, error);
+    logger.error('[posts][likeCount] decrement_failed', { postId, actorId: likerUid, delta: -1, eventId: event.id, error });
   }
 });
 
@@ -73,7 +74,7 @@ export const onCommentCreated = onDocumentCreated('posts/{postId}/comments/{comm
     await postRef.update({
       commentCount: FieldValue.increment(1),
     });
-    logger.info(`Incremented commentCount for post ${postId}`);
+    logger.info('[posts][commentCount] increment', { postId, actorId: commenterUid, delta: 1, eventId: event.id });
 
     // Optional notification for post author (unless self-comment)
     try {
@@ -98,7 +99,7 @@ export const onCommentCreated = onDocumentCreated('posts/{postId}/comments/{comm
       // do not throw: commentCount increment already done, and we prefer not retrying just for notification.
     }
   } catch (error) {
-    logger.error(`Error incrementing commentCount for post ${postId}`, error);
+    logger.error('[posts][commentCount] increment_failed', { postId, actorId: commenterUid, delta: 1, eventId: event.id, error });
   }
 });
 
@@ -116,8 +117,8 @@ export const onCommentDeleted = onDocumentDeleted('posts/{postId}/comments/{comm
       t.update(postRef, { commentCount: next });
     });
 
-    logger.info(`Decremented commentCount for post ${postId}`);
+    logger.info('[posts][commentCount] decrement', { postId, delta: -1, eventId: event.id });
   } catch (error) {
-    logger.error(`Error decrementing commentCount for post ${postId}`, error);
+    logger.error('[posts][commentCount] decrement_failed', { postId, delta: -1, eventId: event.id, error });
   }
 });

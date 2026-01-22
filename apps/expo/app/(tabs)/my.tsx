@@ -18,7 +18,7 @@ import { useAuth } from '../../src/context/auth';
 import { auth, db } from '../../src/firebase/client';
 import { getUserPosts, Post } from '../../src/services/posts';
 import { useEffect, useState, useCallback } from 'react';
-import type { UserDoc } from '@triply/shared/src/models';
+import type { PostStatus, UserDoc } from '@triply/shared/src/models';
 import { Avatar } from '../../src/components/Avatar';
 import { getDownloadUrlCached, invalidateDownloadUrl } from '../../src/firebase/storage';
 
@@ -26,7 +26,7 @@ const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const ITEM_SIZE = width / COLUMN_COUNT;
 
-type ProfilePostFilter = 'approved' | 'pending' | 'rejected';
+type ProfilePostFilter = Exclude<PostStatus, 'draft'>;
 
 export default function MyProfileScreen() {
   const { user, isAdmin } = useAuth();

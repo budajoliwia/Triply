@@ -6,6 +6,8 @@ import {
   query,
   where,
   orderBy,
+  startAfter,
+  limit as firestoreLimit,
   getDocs,
   deleteDoc,
   getDoc,
@@ -13,13 +15,14 @@ import {
   deleteField,
   serverTimestamp,
   Timestamp,
+  type DocumentSnapshot,
   runTransaction,
   documentId,
   writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/client';
-import { PostDoc, PostStatus } from '@triply/shared/src/models';
+import type { PostDoc, PostStatus } from '@triply/shared/src/models';
 import { getUserProfilesByIds } from './users';
 import { getDownloadUrlCached } from '../firebase/storage';
 
@@ -233,6 +236,45 @@ export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]>
   } catch (error) {
     console.error('Error fetching posts:', error);
     return [];
+  }
+}
+
+export async function getApprovedPostsPage({
+  limit,
+  lastDoc,
+}: {
+  limit?: number;
+  lastDoc?: DocumentSnapshot | null;
+}): Promise<{ posts: Post[]; lastDoc: DocumentSnapshot | null; hasMore: boolean }> {
+  const pageLimit = typeof limit === 'number' && limit > 0 ? limit : 10;
+
+  try {
+    const baseConstraints = [
+      where('status', '==', 'approved' as const),
+      orderBy('createdAt', 'desc'),
+    ] as const;
+
+    const q = lastDoc
+      ? query(
+          collection(db, POSTS_COLLECTION),
+          ...baseConstraints,
+          startAfter(lastDoc),
+          firestoreLimit(pageLimit),
+        )
+      : query(collection(db, POSTS_COLLECTION), ...baseConstraints, firestoreLimit(pageLimit));
+
+    const snap = await getDocs(q);
+    const posts = await processPostDocs(snap.docs);
+    const nextLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+
+    return {
+      posts,
+      lastDoc: nextLastDoc,
+      hasMore: snap.docs.length === pageLimit,
+    };
+  } catch (error) {
+    console.error('Error fetching approved posts page:', error);
+    return { posts: [], lastDoc: null, hasMore: false };
   }
 }
 
@@ -487,6 +529,74 @@ export async function getComments(postId: string): Promise<Comment[]> {
   } catch (error) {
     console.error('Error fetching comments:', error);
     throw error;
+  }
+}
+
+export async function getCommentsPage(
+  postId: string,
+  {
+    limit,
+    lastDoc,
+  }: {
+    limit?: number;
+    lastDoc?: DocumentSnapshot | null;
+  },
+): Promise<{ comments: Comment[]; lastDoc: DocumentSnapshot | null; hasMore: boolean }> {
+  const pageLimit = typeof limit === 'number' && limit > 0 ? limit : 20;
+  const commentsRef = collection(db, POSTS_COLLECTION, postId, 'comments');
+
+  const q = lastDoc
+    ? query(commentsRef, orderBy('createdAt', 'asc'), startAfter(lastDoc), firestoreLimit(pageLimit))
+    : query(commentsRef, orderBy('createdAt', 'asc'), firestoreLimit(pageLimit));
+
+  try {
+    const snapshot = await getDocs(q);
+
+    const raw = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) }));
+    const authorIds = Array.from(new Set(raw.map((c) => c.authorId).filter(Boolean)));
+    const profilesById = await getUserProfilesByIds(authorIds);
+    const avatarUrlByPath: Record<string, string> = {};
+
+    const comments = await Promise.all(
+      raw.map(async (c) => {
+        const profile = profilesById.get(c.authorId);
+        const authorName = profile?.username || 'Użytkownik';
+
+        let authorAvatarUrl: string | undefined = undefined;
+        const avatarPath = profile?.avatarPath;
+        if (typeof avatarPath === 'string' && avatarPath) {
+          try {
+            if (avatarUrlByPath[avatarPath]) {
+              authorAvatarUrl = avatarUrlByPath[avatarPath];
+            } else {
+              const url = await getDownloadUrlCached(avatarPath);
+              avatarUrlByPath[avatarPath] = url;
+              authorAvatarUrl = url;
+            }
+          } catch (e) {
+            console.warn('Error fetching comment avatar URL:', e);
+          }
+        }
+
+        return {
+          ...c,
+          authorName,
+          authorAvatarUrl,
+        };
+      }),
+    );
+
+    const nextLastDoc =
+      snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+
+    return {
+      comments,
+      lastDoc: nextLastDoc,
+      hasMore: snapshot.docs.length === pageLimit,
+    };
+  } catch (error) {
+    console.error('Error fetching comments page:', error);
+    return { comments: [], lastDoc: null, hasMore: false };
   }
 }
 

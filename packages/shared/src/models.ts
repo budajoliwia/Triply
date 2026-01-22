@@ -20,7 +20,8 @@ export function isISODateString(value: string): value is ISODateString {
 
 export type UserRole = 'user' | 'admin';
 
-export type PostStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+export const POST_STATUSES = ['draft', 'pending', 'approved', 'rejected'] as const;
+export type PostStatus = (typeof POST_STATUSES)[number];
 
 export type PostEventType =
   | 'created'

@@ -17,6 +17,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/auth';
 import { createPost } from '../../src/services/posts';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 export default function CreateScreen() {
   const { user } = useAuth();
@@ -114,7 +115,7 @@ export default function CreateScreen() {
       setImage(null);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się dodać posta.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się dodać posta.'));
     } finally {
       setLoading(false);
     }

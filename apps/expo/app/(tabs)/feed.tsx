@@ -18,12 +18,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { DocumentSnapshot } from 'firebase/firestore';
 import {
   addComment,
   Comment,
   deleteComment,
   getComments,
-  getPosts,
+  getApprovedPostsPage,
   Post,
   toggleLike,
   getPostsByAuthors,
@@ -38,6 +39,8 @@ import {
   subscribeUnreadCount,
   type Notification,
 } from '../../src/services/notifications';
+import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { formatTimestampDate } from '../../src/utils/time';
 
 export default function FeedScreen() {
   const { user, isAdmin } = useAuth();
@@ -45,6 +48,10 @@ export default function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [feedType, setFeedType] = useState<'all' | 'following'>('all');
+
+  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [expandedComments, setExpandedComments] = useState<Comment[]>([]);
@@ -155,8 +162,12 @@ export default function FeedScreen() {
   const fetchPosts = async () => {
     try {
       if (feedType === 'all') {
-        const approvedPosts = await getPosts('approved');
-        setPosts(approvedPosts);
+        const { posts: pagePosts, lastDoc: nextLastDoc, hasMore: nextHasMore } =
+          await getApprovedPostsPage({ limit: 10, lastDoc: null });
+        setPosts(pagePosts);
+        setLastDoc(nextLastDoc);
+        setHasMore(nextHasMore);
+        setLoadingMore(false);
       } else {
         if (!user) {
           setPosts([]);
@@ -188,6 +199,35 @@ export default function FeedScreen() {
     fetchPosts();
   };
 
+  const loadMore = useCallback(async () => {
+    if (feedType !== 'all') return;
+    if (loading || refreshing) return;
+    if (loadingMore) return;
+    if (!hasMore) return;
+    if (!lastDoc) return;
+
+    setLoadingMore(true);
+    try {
+      const { posts: pagePosts, lastDoc: nextLastDoc, hasMore: nextHasMore } =
+        await getApprovedPostsPage({ limit: 10, lastDoc });
+
+      setPosts((current) => {
+        if (pagePosts.length === 0) return current;
+        const seen = new Set(current.map((p) => p.id));
+        const deduped = pagePosts.filter((p) => !seen.has(p.id));
+        return deduped.length ? [...current, ...deduped] : current;
+      });
+
+      setLastDoc(nextLastDoc);
+      setHasMore(nextHasMore);
+    } catch (e) {
+      console.error(e);
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [feedType, loading, refreshing, loadingMore, hasMore, lastDoc]);
+
   const handleLike = async (post: Post) => {
     if (!user) {
       Alert.alert('Zaloguj się', 'Musisz być zalogowany, aby polubić post.');
@@ -206,7 +246,7 @@ export default function FeedScreen() {
       );
     } catch (error) {
       console.error('Error liking post:', error);
-      Alert.alert('Błąd', 'Nie udało się polubić posta.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się polubić posta.'));
     }
   };
 
@@ -227,7 +267,7 @@ export default function FeedScreen() {
       setExpandedComments(comments);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się pobrać komentarzy.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się pobrać komentarzy.'));
       setExpandedComments([]);
     } finally {
       setExpandedCommentsLoading(false);
@@ -262,10 +302,8 @@ export default function FeedScreen() {
       console.error('Error adding comment:', code, message, error);
       if (code === 'post/not-found') {
         Alert.alert('Błąd', 'Post nie istnieje lub został usunięty.');
-      } else if (code === 'permission-denied') {
-        Alert.alert('Błąd', 'Brak uprawnień do dodania komentarza (rules).');
       } else {
-        Alert.alert('Błąd', 'Nie udało się dodać komentarza.');
+        Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się dodać komentarza.'));
       }
     } finally {
       setCommentSubmitting(false);
@@ -289,7 +327,7 @@ export default function FeedScreen() {
       Alert.alert('Sukces', 'Komentarz został usunięty.');
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', 'Nie udało się usunąć komentarza.');
+      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się usunąć komentarza.'));
     }
   };
 
@@ -307,9 +345,7 @@ export default function FeedScreen() {
           <View>
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
             <Text style={styles.time}>
-              {item.createdAt?.seconds
-                ? new Date(item.createdAt.seconds * 1000).toLocaleDateString()
-                : 'Teraz'}
+              {formatTimestampDate(item.createdAt, 'Teraz')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -450,6 +486,13 @@ export default function FeedScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           keyboardShouldPersistTaps="handled"
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            feedType === 'all' && loadingMore ? (
+              <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 12 }} />
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
@@ -503,9 +546,7 @@ export default function FeedScreen() {
                         ? `${actorLabel} polubił/a Twój post`
                         : `${actorLabel} skomentował/a Twój post`;
 
-                  const dateLabel = n.createdAt?.seconds
-                    ? new Date(n.createdAt.seconds * 1000).toLocaleDateString()
-                    : 'Teraz';
+                  const dateLabel = formatTimestampDate(n.createdAt, 'Teraz');
 
                   const onPress = async () => {
                     // Optimistic UI update so it doesn't keep showing as unread.
