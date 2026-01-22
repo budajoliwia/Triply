@@ -5,7 +5,6 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -13,12 +12,17 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { resolveAvatarUrl, searchUsers, UserProfile } from '../../src/services/users';
 import { Avatar } from '../../src/components/Avatar';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [error, setError] = useState<unknown | null>(null);
 
   // Debounce effect
   useEffect(() => {
@@ -36,11 +40,13 @@ export default function SearchScreen() {
     const performSearch = async () => {
       if (!debouncedQuery.trim()) {
         setResults([]);
+        setError(null);
         return;
       }
 
       setLoading(true);
       try {
+        setError(null);
         const users = await searchUsers(debouncedQuery);
         const withAvatars = await Promise.all(
           users.map(async (u) => {
@@ -51,6 +57,7 @@ export default function SearchScreen() {
         setResults(withAvatars);
       } catch (error) {
         console.error(error);
+        setError(error);
       } finally {
         setLoading(false);
       }
@@ -96,9 +103,41 @@ export default function SearchScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+        <View style={styles.listContent}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={styles.userItem}>
+              <SkeletonBlock height={40} width={40} radius={20} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <SkeletonBlock height={14} width={160} radius={7} />
+                <View style={{ height: 6 }} />
+                <SkeletonBlock height={12} width={220} radius={6} />
+              </View>
+              <SkeletonBlock height={16} width={16} radius={8} />
+            </View>
+          ))}
         </View>
+      ) : error ? (
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się wyszukać użytkowników.')}
+        />
       ) : (
         <FlatList
           data={results}
@@ -107,13 +146,9 @@ export default function SearchScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             debouncedQuery.trim().length > 0 ? (
-              <View style={styles.centerContainer}>
-                <Text style={styles.emptyText}>Brak wyników wyszukiwania.</Text>
-              </View>
+              <EmptyState title="Brak wyników" description="Spróbuj innego zapytania." icon="search-outline" />
             ) : (
-              <View style={styles.centerContainer}>
-                <Text style={styles.emptyText}>Wpisz nazwę użytkownika, aby wyszukać.</Text>
-              </View>
+              <EmptyState title="Wyszukaj" description="Wpisz nazwę użytkownika, aby zacząć." icon="search-outline" />
             )
           }
         />

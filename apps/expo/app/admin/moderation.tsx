@@ -16,14 +16,19 @@ import {
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { getPosts, approvePost, rejectPost, Post } from '../../src/services/posts';
-import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 import { subscribeAdminUnreadCount } from '../../src/services/adminNotifications';
 import { useAuth } from '../../src/context/auth';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { PostStatusBadge } from '../../src/components/PostStatusBadge';
 
 export default function ModerationScreen() {
   const { isAdmin } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown | null>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectingPostId, setRejectingPostId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -33,11 +38,12 @@ export default function ModerationScreen() {
   const fetchPosts = async () => {
     setLoading(true);
     try {
+      setError(null);
       const pendingPosts = await getPosts('pending');
       setPosts(pendingPosts);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się pobrać postów do moderacji.'));
+      setError(error);
     } finally {
       setLoading(false);
     }
@@ -98,7 +104,10 @@ export default function ModerationScreen() {
 
   const renderItem = ({ item }: { item: Post }) => (
     <View style={styles.postContainer}>
-      <Text style={styles.authorId}>Autor ID: {item.authorId}</Text>
+      <View style={styles.rowTop}>
+        <Text style={styles.authorId}>Autor ID: {item.authorId}</Text>
+        <PostStatusBadge status={item.status} compact />
+      </View>
       <Text style={styles.content}>{item.text}</Text>
 
       {item.photoUrl && <Image source={{ uri: item.photoUrl }} style={styles.postImage} />}
@@ -141,7 +150,45 @@ export default function ModerationScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+        <View style={styles.list}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={styles.postContainer}>
+              <SkeletonBlock height={14} width={180} radius={7} />
+              <View style={{ height: 10 }} />
+              <SkeletonBlock height={16} width={'92%'} radius={8} />
+              <View style={{ height: 8 }} />
+              <SkeletonBlock height={16} width={'86%'} radius={8} />
+              <View style={{ height: 12 }} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <SkeletonBlock height={36} width={120} radius={8} />
+                <SkeletonBlock height={36} width={120} radius={8} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : error ? (
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się pobrać postów do moderacji.')}
+          onRetry={fetchPosts}
+        />
       ) : (
         <FlatList
           data={posts}
@@ -149,7 +196,13 @@ export default function ModerationScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Brak postów oczekujących na zatwierdzenie.</Text>
+            <EmptyState
+              title="Brak postów"
+              description="Brak postów oczekujących na ręczną moderację."
+              icon="checkmark-done-outline"
+              actionLabel="Odśwież"
+              onAction={fetchPosts}
+            />
           }
         />
       )}
@@ -242,6 +295,12 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 10,
+  },
+  rowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   postContainer: {
     backgroundColor: '#fff',

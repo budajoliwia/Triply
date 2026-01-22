@@ -223,20 +223,10 @@ async function processPostDocs(docs: any[]): Promise<Post[]> {
  * Fetch posts by status.
  */
 export async function getPosts(status: PostStatus = 'approved'): Promise<Post[]> {
-  try {
-    const q = query(
-      collection(db, POSTS_COLLECTION),
-      where('status', '==', status),
-    );
-
-    const querySnapshot = await getDocs(q);
-    const unsortedPosts = await processPostDocs(querySnapshot.docs);
-
-    return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    return [];
-  }
+  const q = query(collection(db, POSTS_COLLECTION), where('status', '==', status));
+  const querySnapshot = await getDocs(q);
+  const unsortedPosts = await processPostDocs(querySnapshot.docs);
+  return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
 }
 
 export async function getApprovedPostsPage({
@@ -248,60 +238,38 @@ export async function getApprovedPostsPage({
 }): Promise<{ posts: Post[]; lastDoc: DocumentSnapshot | null; hasMore: boolean }> {
   const pageLimit = typeof limit === 'number' && limit > 0 ? limit : 10;
 
-  try {
-    const baseConstraints = [
-      where('status', '==', 'approved' as const),
-      orderBy('createdAt', 'desc'),
-    ] as const;
+  const baseConstraints = [where('status', '==', 'approved' as const), orderBy('createdAt', 'desc')] as const;
 
-    const q = lastDoc
-      ? query(
-          collection(db, POSTS_COLLECTION),
-          ...baseConstraints,
-          startAfter(lastDoc),
-          firestoreLimit(pageLimit),
-        )
-      : query(collection(db, POSTS_COLLECTION), ...baseConstraints, firestoreLimit(pageLimit));
+  const q = lastDoc
+    ? query(collection(db, POSTS_COLLECTION), ...baseConstraints, startAfter(lastDoc), firestoreLimit(pageLimit))
+    : query(collection(db, POSTS_COLLECTION), ...baseConstraints, firestoreLimit(pageLimit));
 
-    const snap = await getDocs(q);
-    const posts = await processPostDocs(snap.docs);
-    const nextLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+  const snap = await getDocs(q);
+  const posts = await processPostDocs(snap.docs);
+  const nextLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
 
-    return {
-      posts,
-      lastDoc: nextLastDoc,
-      hasMore: snap.docs.length === pageLimit,
-    };
-  } catch (error) {
-    console.error('Error fetching approved posts page:', error);
-    return { posts: [], lastDoc: null, hasMore: false };
-  }
+  return {
+    posts,
+    lastDoc: nextLastDoc,
+    hasMore: snap.docs.length === pageLimit,
+  };
 }
 
 /**
  * Fetch all posts for a specific user (including pending), optionally filtered by status.
  */
 export async function getUserPosts(userId: string, status?: PostStatus): Promise<Post[]> {
-  try {
-    let q;
-    if (status) {
-      q = query(
-        collection(db, POSTS_COLLECTION),
-        where('authorId', '==', userId),
-        where('status', '==', status)
-      );
-    } else {
-      q = query(collection(db, POSTS_COLLECTION), where('authorId', '==', userId));
-    }
-
-    const querySnapshot = await getDocs(q);
-    const unsortedPosts = await processPostDocs(querySnapshot.docs);
-
-    return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
-  } catch (error) {
-    console.error('Error fetching user posts:', error);
-    return [];
+  let q;
+  if (status) {
+    q = query(collection(db, POSTS_COLLECTION), where('authorId', '==', userId), where('status', '==', status));
+  } else {
+    q = query(collection(db, POSTS_COLLECTION), where('authorId', '==', userId));
   }
+
+  const querySnapshot = await getDocs(q);
+  const unsortedPosts = await processPostDocs(querySnapshot.docs);
+
+  return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
 }
 
 /**
@@ -316,25 +284,16 @@ export async function getPostsByAuthors(authorIds: string[]): Promise<Post[]> {
     chunks.push(authorIds.slice(i, i + 10));
   }
 
-  try {
-    const allDocs = [];
-    
-    for (const chunk of chunks) {
-      const q = query(
-        collection(db, POSTS_COLLECTION),
-        where('status', '==', 'approved'),
-        where('authorId', 'in', chunk)
-      );
-      const snapshot = await getDocs(q);
-      allDocs.push(...snapshot.docs);
-    }
+  const allDocs = [];
 
-    const unsortedPosts = await processPostDocs(allDocs);
-    return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
-  } catch (error) {
-    console.error('Error fetching posts by authors:', error);
-    return [];
+  for (const chunk of chunks) {
+    const q = query(collection(db, POSTS_COLLECTION), where('status', '==', 'approved'), where('authorId', 'in', chunk));
+    const snapshot = await getDocs(q);
+    allDocs.push(...snapshot.docs);
   }
+
+  const unsortedPosts = await processPostDocs(allDocs);
+  return [...unsortedPosts].sort((a, b) => sortPostsNewestFirst(a, b));
 }
 
 /**
@@ -549,55 +508,49 @@ export async function getCommentsPage(
     ? query(commentsRef, orderBy('createdAt', 'asc'), startAfter(lastDoc), firestoreLimit(pageLimit))
     : query(commentsRef, orderBy('createdAt', 'asc'), firestoreLimit(pageLimit));
 
-  try {
-    const snapshot = await getDocs(q);
+  const snapshot = await getDocs(q);
 
-    const raw = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) }));
-    const authorIds = Array.from(new Set(raw.map((c) => c.authorId).filter(Boolean)));
-    const profilesById = await getUserProfilesByIds(authorIds);
-    const avatarUrlByPath: Record<string, string> = {};
+  const raw = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) }));
+  const authorIds = Array.from(new Set(raw.map((c) => c.authorId).filter(Boolean)));
+  const profilesById = await getUserProfilesByIds(authorIds);
+  const avatarUrlByPath: Record<string, string> = {};
 
-    const comments = await Promise.all(
-      raw.map(async (c) => {
-        const profile = profilesById.get(c.authorId);
-        const authorName = profile?.username || 'Użytkownik';
+  const comments = await Promise.all(
+    raw.map(async (c) => {
+      const profile = profilesById.get(c.authorId);
+      const authorName = profile?.username || 'Użytkownik';
 
-        let authorAvatarUrl: string | undefined = undefined;
-        const avatarPath = profile?.avatarPath;
-        if (typeof avatarPath === 'string' && avatarPath) {
-          try {
-            if (avatarUrlByPath[avatarPath]) {
-              authorAvatarUrl = avatarUrlByPath[avatarPath];
-            } else {
-              const url = await getDownloadUrlCached(avatarPath);
-              avatarUrlByPath[avatarPath] = url;
-              authorAvatarUrl = url;
-            }
-          } catch (e) {
-            console.warn('Error fetching comment avatar URL:', e);
+      let authorAvatarUrl: string | undefined = undefined;
+      const avatarPath = profile?.avatarPath;
+      if (typeof avatarPath === 'string' && avatarPath) {
+        try {
+          if (avatarUrlByPath[avatarPath]) {
+            authorAvatarUrl = avatarUrlByPath[avatarPath];
+          } else {
+            const url = await getDownloadUrlCached(avatarPath);
+            avatarUrlByPath[avatarPath] = url;
+            authorAvatarUrl = url;
           }
+        } catch (e) {
+          console.warn('Error fetching comment avatar URL:', e);
         }
+      }
 
-        return {
-          ...c,
-          authorName,
-          authorAvatarUrl,
-        };
-      }),
-    );
+      return {
+        ...c,
+        authorName,
+        authorAvatarUrl,
+      };
+    }),
+  );
 
-    const nextLastDoc =
-      snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+  const nextLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
-    return {
-      comments,
-      lastDoc: nextLastDoc,
-      hasMore: snapshot.docs.length === pageLimit,
-    };
-  } catch (error) {
-    console.error('Error fetching comments page:', error);
-    return { comments: [], lastDoc: null, hasMore: false };
-  }
+  return {
+    comments,
+    lastDoc: nextLastDoc,
+    hasMore: snapshot.docs.length === pageLimit,
+  };
 }
 
 /**
@@ -605,49 +558,44 @@ export async function getCommentsPage(
  * Resolves display image URL + author username (cached per call).
  */
 export async function getPostById(postId: string): Promise<Post | null> {
-  try {
-    const postRef = doc(db, POSTS_COLLECTION, postId);
-    const snap = await getDoc(postRef);
-    if (!snap.exists()) return null;
+  const postRef = doc(db, POSTS_COLLECTION, postId);
+  const snap = await getDoc(postRef);
+  if (!snap.exists()) return null;
 
-    const data = snap.data() as PostDoc<Timestamp>;
+  const data = snap.data() as PostDoc<Timestamp>;
 
-    let photoUrl: string | undefined = undefined;
-    let authorName = 'Użytkownik';
-    let authorAvatarUrl: string | undefined = undefined;
+  let photoUrl: string | undefined = undefined;
+  let authorName = 'Użytkownik';
+  let authorAvatarUrl: string | undefined = undefined;
 
-    if (data.photo?.displayPath) {
-      try {
-        const photoRef = ref(storage, data.photo.displayPath);
-        photoUrl = await getDownloadURL(photoRef);
-      } catch (e) {
-        console.warn('Error fetching photo URL:', e);
-      }
+  if (data.photo?.displayPath) {
+    try {
+      const photoRef = ref(storage, data.photo.displayPath);
+      photoUrl = await getDownloadURL(photoRef);
+    } catch (e) {
+      console.warn('Error fetching photo URL:', e);
     }
-
-    if (data.authorId) {
-      const profilesById = await getUserProfilesByIds([data.authorId]);
-      const profile = profilesById.get(data.authorId);
-      if (profile?.username) authorName = profile.username;
-      const avatarPath = profile?.avatarPath;
-      if (typeof avatarPath === 'string' && avatarPath) {
-        try {
-          authorAvatarUrl = await getDownloadUrlCached(avatarPath);
-        } catch (e) {
-          console.warn('Error fetching avatar URL:', e);
-        }
-      }
-    }
-
-    return {
-      id: snap.id,
-      ...data,
-      photoUrl,
-      authorName,
-      authorAvatarUrl,
-    };
-  } catch (error) {
-    console.error('Error fetching post by id:', error);
-    return null;
   }
+
+  if (data.authorId) {
+    const profilesById = await getUserProfilesByIds([data.authorId]);
+    const profile = profilesById.get(data.authorId);
+    if (profile?.username) authorName = profile.username;
+    const avatarPath = profile?.avatarPath;
+    if (typeof avatarPath === 'string' && avatarPath) {
+      try {
+        authorAvatarUrl = await getDownloadUrlCached(avatarPath);
+      } catch (e) {
+        console.warn('Error fetching avatar URL:', e);
+      }
+    }
+  }
+
+  return {
+    id: snap.id,
+    ...data,
+    photoUrl,
+    authorName,
+    authorAvatarUrl,
+  };
 }

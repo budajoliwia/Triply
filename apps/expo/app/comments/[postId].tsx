@@ -19,8 +19,11 @@ import type { DocumentSnapshot } from 'firebase/firestore';
 import { getCommentsPage, addComment, deleteComment, Comment } from '../../src/services/posts';
 import { useAuth } from '../../src/context/auth';
 import { Avatar } from '../../src/components/Avatar';
-import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 import { formatTimestampDate } from '../../src/utils/time';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
 
 export default function CommentsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -30,6 +33,7 @@ export default function CommentsScreen() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<unknown | null>(null);
   const [inputText, setInputText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
@@ -43,6 +47,7 @@ export default function CommentsScreen() {
   const fetchCommentsFirstPage = async () => {
     if (!postId) return;
     try {
+      setError(null);
       setHasMore(true);
       setLastDoc(null);
       const { comments: pageComments, lastDoc: nextLastDoc, hasMore: nextHasMore } =
@@ -52,7 +57,7 @@ export default function CommentsScreen() {
       setHasMore(nextHasMore);
     } catch (error) {
       console.error(error);
-      Alert.alert('Błąd', mapFirestoreErrorToMessage(error, 'Nie udało się pobrać komentarzy.'));
+      setError(error);
     } finally {
       setLoading(false);
     }
@@ -77,6 +82,7 @@ export default function CommentsScreen() {
 
     setLoadingMore(true);
     try {
+      setError(null);
       const { comments: pageComments, lastDoc: nextLastDoc, hasMore: nextHasMore } =
         await getCommentsPage(postId, { limit: 20, lastDoc });
 
@@ -91,7 +97,7 @@ export default function CommentsScreen() {
       setHasMore(nextHasMore);
     } catch (e) {
       console.error(e);
-      Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się pobrać kolejnych komentarzy.'));
+      setError(e);
       setHasMore(false);
     } finally {
       setLoadingMore(false);
@@ -190,7 +196,11 @@ export default function CommentsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator size="small" color="#007AFF" style={styles.loadMoreSpinner} />
+            <View style={{ marginTop: 10 }}>
+              <SkeletonBlock height={12} width={'92%'} radius={6} />
+              <View style={{ height: 8 }} />
+              <SkeletonBlock height={12} width={'86%'} radius={6} />
+            </View>
           ) : hasMore && comments.length > 0 ? (
             <TouchableOpacity style={styles.loadMoreButton} onPress={loadMoreComments}>
               <Text style={styles.loadMoreText}>Załaduj więcej komentarzy</Text>
@@ -199,9 +209,40 @@ export default function CommentsScreen() {
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+            <View style={{ paddingTop: 10 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <View key={i} style={styles.commentContainer}>
+                  <SkeletonBlock height={12} width={180} radius={6} />
+                  <View style={{ height: 8 }} />
+                  <SkeletonBlock height={14} width={'92%'} radius={7} />
+                </View>
+              ))}
+            </View>
+          ) : error ? (
+            <ErrorState
+              kind={
+                classifyFirestoreError(error) === 'offline'
+                  ? 'offline'
+                  : classifyFirestoreError(error) === 'permission'
+                    ? 'permission'
+                    : classifyFirestoreError(error) === 'timeout'
+                      ? 'timeout'
+                      : 'unknown'
+              }
+              title={
+                classifyFirestoreError(error) === 'offline'
+                  ? 'Brak internetu'
+                  : classifyFirestoreError(error) === 'permission'
+                    ? 'Brak uprawnień'
+                    : classifyFirestoreError(error) === 'timeout'
+                      ? 'Przekroczono czas oczekiwania'
+                      : 'Coś poszło nie tak'
+              }
+              description={mapFirestoreErrorToMessage(error, 'Nie udało się pobrać komentarzy.')}
+              onRetry={fetchCommentsFirstPage}
+            />
           ) : (
-            <Text style={styles.emptyText}>Brak komentarzy. Bądź pierwszy!</Text>
+            <EmptyState title="Brak komentarzy" description="Bądź pierwszy i zostaw komentarz." icon="chatbubble-ellipses-outline" />
           )
         }
       />

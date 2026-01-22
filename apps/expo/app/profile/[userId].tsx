@@ -24,7 +24,10 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../src/firebase/client';
 import { Avatar } from '../../src/components/Avatar';
 import { getDownloadUrlCached } from '../../src/firebase/storage';
-import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -38,6 +41,8 @@ export default function PublicProfileScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [following, setFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -53,6 +58,7 @@ export default function PublicProfileScreen() {
     if (!userId) return;
 
     setLoading(true);
+    setError(null);
     const userRef = doc(db, 'users', userId);
     let active = true;
     const unsubscribe = onSnapshot(
@@ -81,7 +87,7 @@ export default function PublicProfileScreen() {
       },
       (error) => {
         console.error('Error subscribing to profile:', error);
-        Alert.alert('Błąd', 'Nie udało się załadować profilu.');
+        setError(error);
         setLoading(false);
       },
     );
@@ -90,7 +96,7 @@ export default function PublicProfileScreen() {
       active = false;
       unsubscribe();
     };
-  }, [userId]);
+  }, [userId, retryKey]);
 
   // Firestore is the source of truth (following state = existence of doc)
   useEffect(() => {
@@ -117,12 +123,14 @@ export default function PublicProfileScreen() {
   const fetchPosts = useCallback(async () => {
     if (!userId) return;
     try {
+      setError(null);
       const userPosts = await getUserPosts(userId, 'approved');
       setPosts(userPosts);
     } catch (error) {
       console.error('Error fetching user posts:', error);
+      setError(error);
     }
-  }, [userId]);
+  }, [userId, retryKey]);
 
   useEffect(() => {
     fetchPosts();
@@ -208,9 +216,48 @@ export default function PublicProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.loadingContainer, { padding: 20, width: '100%' }]}>
+        <SkeletonBlock height={100} width={100} radius={50} />
+        <View style={{ height: 12 }} />
+        <SkeletonBlock height={20} width={180} radius={10} />
+        <View style={{ height: 10 }} />
+        <SkeletonBlock height={14} width={'80%'} radius={7} />
+        <View style={{ height: 8 }} />
+        <SkeletonBlock height={14} width={'70%'} radius={7} />
       </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się załadować profilu.')}
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+            setRetryKey((x) => x + 1);
+          }}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -239,9 +286,7 @@ export default function PublicProfileScreen() {
         ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Użytkownik nie dodał jeszcze postów.</Text>
-          </View>
+          <EmptyState title="Brak postów" description="Użytkownik nie dodał jeszcze postów." icon="images-outline" />
         }
       />
     </SafeAreaView>

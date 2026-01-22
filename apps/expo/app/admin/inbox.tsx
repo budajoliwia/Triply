@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/context/auth';
 import {
@@ -8,6 +8,10 @@ import {
   type AdminNotification,
 } from '../../src/services/adminNotifications';
 import { formatTimestampDate } from '../../src/utils/time';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 function formatMeta(n: AdminNotification): string {
   const score = typeof n.meta?.score === 'number' ? n.meta?.score : null;
@@ -29,10 +33,12 @@ export default function AdminInboxScreen() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AdminNotification[]>([]);
+  const [error, setError] = useState<unknown | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
     setLoading(true);
+    setError(null);
     return subscribeAdminNotifications(
       { limit: 50, unreadOnly: true },
       (next) => {
@@ -41,16 +47,11 @@ export default function AdminInboxScreen() {
       },
       (e) => {
         console.warn('Admin inbox listener error:', e);
+        setError(e);
         setLoading(false);
       },
     );
   }, [isAdmin]);
-
-  const emptyText = useMemo(() => {
-    if (!isAdmin) return 'Brak dostępu.';
-    if (loading) return 'Ładowanie…';
-    return 'Brak powiadomień do przejrzenia.';
-  }, [isAdmin, loading]);
 
   if (!isAdmin) {
     return (
@@ -72,31 +73,67 @@ export default function AdminInboxScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+        <View style={styles.list}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={styles.card}>
+              <SkeletonBlock height={16} width={220} radius={8} />
+              <View style={{ height: 8 }} />
+              <SkeletonBlock height={12} width={120} radius={6} />
+              <View style={{ height: 10 }} />
+              <SkeletonBlock height={12} width={'85%'} radius={6} />
+              <View style={{ height: 12 }} />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <SkeletonBlock height={36} width={120} radius={999} />
+                <SkeletonBlock height={36} width={160} radius={999} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : error ? (
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się załadować inboxa admina.')}
+        />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(x) => x.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>{emptyText}</Text>
-            </View>
+            <EmptyState
+              title="Brak powiadomień"
+              description="Nie ma żadnych postów wymagających ręcznej moderacji."
+              icon="inbox-outline"
+            />
           }
           renderItem={({ item }) => {
             const meta = formatMeta(item);
             const dateLabel = formatTimestampDate(item.createdAt, 'Teraz');
             return (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Post wymaga przeglądu</Text>
+                <Text style={styles.cardTitle}>Wymaga ręcznej moderacji</Text>
                 <Text style={styles.cardSub}>{dateLabel}</Text>
                 {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
 
                 <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.btn, styles.btnPrimary]}
-                    onPress={() => router.push(`/post/${item.postId}`)}
-                  >
+                  <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={() => router.push(`/post/${item.postId}`)}>
                     <Text style={styles.btnPrimaryText}>Otwórz post</Text>
                   </TouchableOpacity>
                   <TouchableOpacity

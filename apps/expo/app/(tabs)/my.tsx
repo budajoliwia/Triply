@@ -8,7 +8,6 @@ import {
   Dimensions,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -21,6 +20,11 @@ import { useEffect, useState, useCallback } from 'react';
 import type { PostStatus, UserDoc } from '@triply/shared/src/models';
 import { Avatar } from '../../src/components/Avatar';
 import { getDownloadUrlCached, invalidateDownloadUrl } from '../../src/firebase/storage';
+import { PostStatusBadge } from '../../src/components/PostStatusBadge';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -34,6 +38,7 @@ export default function MyProfileScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<unknown | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [bio, setBio] = useState<string | null>(null);
   const [avatarPath, setAvatarPath] = useState<string | null>(null);
@@ -46,13 +51,16 @@ export default function MyProfileScreen() {
       setPosts([]);
       setLoading(false);
       setRefreshing(false);
+      setError(null);
       return;
     }
     try {
+      setError(null);
       const userPosts = await getUserPosts(user.uid);
       setPosts(userPosts);
     } catch (error) {
       console.error(error);
+      setError(error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -166,6 +174,10 @@ export default function MyProfileScreen() {
 
   const renderItem = ({ item }: { item: Post }) => {
     const showRejectedReason = item.status === 'rejected' && typeof item.rejectionReason === 'string' && !!item.rejectionReason.trim();
+    const ai = {
+      textDecision: ((item as any)?.moderation?.decision ?? null) as any,
+      imageDecision: ((item as any)?.moderation?.image?.decision ?? null) as any,
+    };
 
     return (
       <TouchableOpacity
@@ -187,17 +199,9 @@ export default function MyProfileScreen() {
           </View>
         )}
 
-        {item.status === 'pending' && (
-          <View style={styles.pendingBadge}>
-            <Text style={styles.pendingText}>Oczekuje</Text>
-          </View>
-        )}
-
-        {item.status === 'rejected' && (
-          <View style={styles.rejectedBadge}>
-            <Text style={styles.rejectedText}>Odrzucone</Text>
-          </View>
-        )}
+        <View style={styles.statusOverlay}>
+          <PostStatusBadge status={item.status} ai={ai} compact />
+        </View>
 
         {showRejectedReason && (
           <View style={styles.reasonOverlay}>
@@ -281,17 +285,65 @@ export default function MyProfileScreen() {
 
   const filteredPosts = posts.filter((p) => p.status === postFilter);
 
-  const emptyText =
+  const emptyTitle =
+    postFilter === 'approved'
+      ? 'Brak postów'
+      : postFilter === 'pending'
+        ? 'Brak postów'
+        : 'Brak postów';
+  const emptyDesc =
     postFilter === 'approved'
       ? 'Nie masz jeszcze żadnych zatwierdzonych postów.'
       : postFilter === 'pending'
-        ? 'Brak postów oczekujących na zatwierdzenie.'
-        : 'Brak odrzuconych postów.';
+        ? 'Nie masz postów oczekujących na moderację.'
+        : 'Nie masz odrzuconych postów.';
 
   return (
     <SafeAreaView style={styles.container}>
       {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
+        <View style={{ padding: 20 }}>
+          <View style={{ alignItems: 'center' }}>
+            <SkeletonBlock height={100} width={100} radius={50} />
+            <View style={{ marginTop: 12, width: 160 }}>
+              <SkeletonBlock height={18} radius={9} />
+            </View>
+            <View style={{ marginTop: 10, width: '85%' }}>
+              <SkeletonBlock height={14} radius={7} />
+              <View style={{ height: 8 }} />
+              <SkeletonBlock height={14} radius={7} />
+            </View>
+          </View>
+          <View style={{ marginTop: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
+            <SkeletonBlock height={34} width={110} radius={999} />
+            <SkeletonBlock height={34} width={110} radius={999} />
+            <SkeletonBlock height={34} width={110} radius={999} />
+          </View>
+          <View style={{ marginTop: 14, flexDirection: 'row', flexWrap: 'wrap' }}>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <View key={i} style={{ width: ITEM_SIZE, height: ITEM_SIZE, padding: 1 }}>
+                <SkeletonBlock height={ITEM_SIZE - 2} radius={0} />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : error ? (
+        <ErrorState
+          kind={classifyFirestoreError(error) === 'permission' ? 'permission' : classifyFirestoreError(error) === 'offline' ? 'offline' : classifyFirestoreError(error) === 'timeout' ? 'timeout' : 'unknown'}
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się załadować postów.')}
+          onRetry={() => {
+            setLoading(true);
+            fetchUserPosts();
+          }}
+        />
       ) : (
         <FlatList
           data={filteredPosts}
@@ -302,9 +354,7 @@ export default function MyProfileScreen() {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{emptyText}</Text>
-            </View>
+            <EmptyState title={emptyTitle} description={emptyDesc} icon="images-outline" />
           }
         />
       )}
@@ -316,9 +366,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  loader: {
-    marginTop: 20,
   },
   listContent: {
     paddingBottom: 20,
@@ -438,33 +485,14 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  pendingBadge: {
+  statusOverlay: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 149, 0, 0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    padding: 6,
     borderRadius: 12,
-  },
-  pendingText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  rejectedBadge: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(255, 59, 48, 0.92)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  rejectedText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
+    maxWidth: ITEM_SIZE - 12,
   },
   reasonOverlay: {
     position: 'absolute',

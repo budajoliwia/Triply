@@ -29,8 +29,12 @@ import {
   type PostEvent,
 } from '../../src/services/posts';
 import { Avatar } from '../../src/components/Avatar';
-import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
+import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 import { formatTimestampDate } from '../../src/utils/time';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { PostStatusBadge } from '../../src/components/PostStatusBadge';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -53,6 +57,8 @@ export default function PostDetailsScreen() {
 
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [likeUpdating, setLikeUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -69,15 +75,22 @@ export default function PostDetailsScreen() {
     (async () => {
       if (!postId) return;
       setLoading(true);
-      const p = await getPostById(postId);
-      if (cancelled) return;
-      setPost(p);
-      setLoading(false);
+      try {
+        setError(null);
+        const p = await getPostById(postId);
+        if (cancelled) return;
+        setPost(p);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setError(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [postId]);
+  }, [postId, retryKey]);
 
   const refreshComments = async () => {
     if (!postId) return;
@@ -87,6 +100,7 @@ export default function PostDetailsScreen() {
       setComments(list);
     } catch (e) {
       console.error(e);
+      // keep existing alert for action-level errors, but also allow nicer empty/error rendering
       Alert.alert('Błąd', mapFirestoreErrorToMessage(e, 'Nie udało się pobrać komentarzy.'));
     } finally {
       setCommentsLoading(false);
@@ -202,9 +216,56 @@ export default function PostDetailsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.loadingContainer, { padding: 16, width: '100%' }]}>
+        <SkeletonBlock height={18} width={180} radius={9} />
+        <View style={{ height: 12 }} />
+        <SkeletonBlock height={220} width={'100%'} radius={12} />
+        <View style={{ height: 12 }} />
+        <SkeletonBlock height={14} width={'92%'} radius={7} />
+        <View style={{ height: 8 }} />
+        <SkeletonBlock height={14} width={'84%'} radius={7} />
       </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+            <Text style={styles.backButtonText}>Wróć</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Post</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się załadować posta.')}
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+            setRetryKey((x) => x + 1);
+          }}
+        />
+      </SafeAreaView>
     );
   }
 
@@ -220,7 +281,7 @@ export default function PostDetailsScreen() {
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <Text>Nie znaleziono posta.</Text>
+          <EmptyState title="Nie znaleziono posta" description="Możliwe, że został usunięty lub nie masz do niego dostępu." icon="document-text-outline" />
         </View>
       </SafeAreaView>
     );
@@ -258,26 +319,15 @@ export default function PostDetailsScreen() {
               </View>
             </TouchableOpacity>
 
-            {(isAdmin || user?.uid === post.authorId) && post.status !== 'approved' && (
+            {(isAdmin || user?.uid === post.authorId) && (
               <View style={styles.statusRow}>
-                <View
-                  style={[
-                    styles.statusPill,
-                    post.status === 'pending' && styles.statusPending,
-                    post.status === 'rejected' && styles.statusRejected,
-                    post.status === 'draft' && styles.statusDraft,
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {post.status === 'pending'
-                      ? 'Oczekuje'
-                      : post.status === 'rejected'
-                        ? 'Odrzucone'
-                        : post.status === 'draft'
-                          ? 'Szkic'
-                          : post.status}
-                  </Text>
-                </View>
+                <PostStatusBadge
+                  status={post.status}
+                  ai={{
+                    textDecision: ((post as any)?.moderation?.decision ?? null) as any,
+                    imageDecision: ((post as any)?.moderation?.image?.decision ?? null) as any,
+                  }}
+                />
               </View>
             )}
 
@@ -313,7 +363,13 @@ export default function PostDetailsScreen() {
               <View style={styles.eventsContainer}>
                 <Text style={styles.eventsTitle}>Post events</Text>
                 {eventsLoading ? (
-                  <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 8 }} />
+                  <View style={{ marginTop: 8 }}>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <View key={i} style={{ marginBottom: 6 }}>
+                        <SkeletonBlock height={12} width={'95%'} radius={6} />
+                      </View>
+                    ))}
+                  </View>
                 ) : postEvents.length === 0 ? (
                   <Text style={styles.eventsEmpty}>Brak zdarzeń.</Text>
                 ) : (
@@ -356,9 +412,17 @@ export default function PostDetailsScreen() {
         }}
         ListEmptyComponent={
           commentsLoading ? (
-            <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 10 }} />
+            <View style={{ paddingTop: 10 }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <View key={i} style={styles.commentContainer}>
+                  <SkeletonBlock height={12} width={160} radius={6} />
+                  <View style={{ height: 8 }} />
+                  <SkeletonBlock height={14} width={'92%'} radius={7} />
+                </View>
+              ))}
+            </View>
           ) : (
-            <Text style={styles.emptyCommentsText}>Brak komentarzy. Bądź pierwszy!</Text>
+            <EmptyState title="Brak komentarzy" description="Bądź pierwszy i zostaw komentarz." icon="chatbubble-ellipses-outline" />
           )
         }
       />

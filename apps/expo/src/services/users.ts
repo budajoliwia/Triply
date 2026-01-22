@@ -217,14 +217,9 @@ export async function searchUsers(searchQuery: string): Promise<UserProfile[]> {
     limit(20)
   );
 
-  try {
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as UserDoc),
-    }));
-  } catch (error) {
-    console.error('Error searching users:', error);
-    return [];
-  }
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as UserDoc),
+  }));
 }

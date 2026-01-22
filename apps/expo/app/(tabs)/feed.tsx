@@ -41,11 +41,16 @@ import {
 } from '../../src/services/notifications';
 import { mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 import { formatTimestampDate } from '../../src/utils/time';
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorState } from '../../src/components/ErrorState';
+import { SkeletonBlock } from '../../src/components/Skeleton';
+import { classifyFirestoreError } from '../../src/utils/firestoreErrors';
 
 export default function FeedScreen() {
   const { user, isAdmin } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [feedType, setFeedType] = useState<'all' | 'following'>('all');
 
@@ -161,6 +166,7 @@ export default function FeedScreen() {
 
   const fetchPosts = async () => {
     try {
+      setError(null);
       if (feedType === 'all') {
         const { posts: pagePosts, lastDoc: nextLastDoc, hasMore: nextHasMore } =
           await getApprovedPostsPage({ limit: 10, lastDoc: null });
@@ -183,6 +189,7 @@ export default function FeedScreen() {
       }
     } catch (error) {
       console.error(error);
+      setError(error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -373,7 +380,15 @@ export default function FeedScreen() {
         {isExpanded && (
           <View style={styles.commentsSection}>
             {expandedCommentsLoading ? (
-              <ActivityIndicator size="small" color="#007AFF" style={styles.commentsLoader} />
+              <View style={{ paddingVertical: 6 }}>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <View key={i} style={[styles.commentRow, { backgroundColor: '#f3f3f3' }]}>
+                    <SkeletonBlock height={12} width={140} radius={6} />
+                    <View style={{ height: 8 }} />
+                    <SkeletonBlock height={14} width={'92%'} radius={7} />
+                  </View>
+                ))}
+              </View>
             ) : expandedComments.length === 0 ? (
               <Text style={styles.emptyCommentsText}>Brak komentarzy. Bądź pierwszy!</Text>
             ) : (
@@ -477,7 +492,51 @@ export default function FeedScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
+        <View style={{ padding: 10 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <View key={i} style={[styles.postContainer, { padding: 15 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <SkeletonBlock height={40} width={40} radius={20} />
+                <View style={{ marginLeft: 10, flex: 1 }}>
+                  <SkeletonBlock height={14} width={140} radius={7} />
+                  <View style={{ height: 6 }} />
+                  <SkeletonBlock height={12} width={90} radius={6} />
+                </View>
+              </View>
+              <SkeletonBlock height={14} width={'96%'} radius={7} />
+              <View style={{ height: 8 }} />
+              <SkeletonBlock height={14} width={'84%'} radius={7} />
+              <View style={{ height: 10 }} />
+              <SkeletonBlock height={200} width={'100%'} radius={8} />
+            </View>
+          ))}
+        </View>
+      ) : error ? (
+        <ErrorState
+          kind={
+            classifyFirestoreError(error) === 'offline'
+              ? 'offline'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'permission'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'timeout'
+                  : 'unknown'
+          }
+          title={
+            classifyFirestoreError(error) === 'offline'
+              ? 'Brak internetu'
+              : classifyFirestoreError(error) === 'permission'
+                ? 'Brak uprawnień'
+                : classifyFirestoreError(error) === 'timeout'
+                  ? 'Przekroczono czas oczekiwania'
+                  : 'Coś poszło nie tak'
+          }
+          description={mapFirestoreErrorToMessage(error, 'Nie udało się załadować feedu.')}
+          onRetry={() => {
+            setLoading(true);
+            fetchPosts();
+          }}
+        />
       ) : (
         <FlatList
           data={posts}
@@ -494,13 +553,15 @@ export default function FeedScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {feedType === 'following'
+            <EmptyState
+              title="Brak postów"
+              description={
+                feedType === 'following'
                   ? 'Nie obserwujesz nikogo lub obserwowani nie dodali postów.'
-                  : 'Brak postów. Bądź pierwszy!'}
-              </Text>
-            </View>
+                  : 'Jeszcze nie ma postów. Bądź pierwszy!'
+              }
+              icon="images-outline"
+            />
           }
         />
       )}
@@ -523,13 +584,9 @@ export default function FeedScreen() {
             </View>
 
             {!user ? (
-              <View style={styles.sheetEmpty}>
-                <Text style={styles.sheetEmptyText}>Zaloguj się, aby zobaczyć powiadomienia.</Text>
-              </View>
+              <EmptyState title="Powiadomienia" description="Zaloguj się, aby zobaczyć powiadomienia." icon="notifications-outline" />
             ) : notifications.length === 0 ? (
-              <View style={styles.sheetEmpty}>
-                <Text style={styles.sheetEmptyText}>Brak powiadomień.</Text>
-              </View>
+              <EmptyState title="Brak powiadomień" description="Gdy coś się wydarzy, zobaczysz to tutaj." icon="notifications-outline" />
             ) : (
               <FlatList
                 data={notifications}
