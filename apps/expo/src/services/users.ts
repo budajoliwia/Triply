@@ -13,7 +13,7 @@ import {
   documentId,
   updateDoc,
   deleteField,
-} from 'firebase/firestore';
+} from '@firebase/firestore/dist/index.cjs.js';
 import { db } from '../firebase/client';
 import { UserDoc } from '@triply/shared/src/models';
 import { getDownloadUrlCached, uploadUserAvatarJpeg } from '../firebase/storage';

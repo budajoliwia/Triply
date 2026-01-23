@@ -32,7 +32,7 @@ function RootLayoutNav() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />;
 }
 
 export default function RootLayout() {

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '@firebase/firestore/dist/index.cjs.js';
 import { useAuth } from '../../src/context/auth';
 import { auth, db } from '../../src/firebase/client';
 import { getUserPosts, Post } from '../../src/services/posts';
@@ -26,7 +26,8 @@ import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { classifyFirestoreError, mapFirestoreErrorToMessage } from '../../src/utils/firestoreErrors';
 import { Button } from '../../src/components/Button';
-import { colors, hairline, radius, space, typography } from '../../src/theme';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, shadow, space, typography } from '../../src/theme';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -218,67 +219,68 @@ export default function MyProfileScreen() {
 
   const renderHeader = () => (
     <View style={styles.profileHeader}>
-      <Avatar size={100} uri={avatarUrl} cacheBuster={refreshAvatar} />
+      <View pointerEvents="none" style={styles.heroBg}>
+        <View style={styles.heroBlobA} />
+        <View style={styles.heroBlobB} />
+      </View>
+
+      <Avatar size={104} uri={avatarUrl} cacheBuster={refreshAvatar} />
       <Text style={styles.name}>{username ? `@${username}` : 'Mój Profil'}</Text>
       <Text style={[styles.bio, !bio && styles.bioPlaceholder]} numberOfLines={3}>
         {bio ? bio : 'Dodaj krótki opis o sobie'}
       </Text>
 
-      <Button label="Edytuj profil" variant="primary" size="sm" onPress={() => router.push('/edit-profile')} style={{ marginBottom: space.md }} />
+      <SurfaceCard style={styles.statsCard}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats.followers}</Text>
+            <Text style={styles.statLabel}>Obserwujący</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{stats.following}</Text>
+            <Text style={styles.statLabel}>Obserwuje</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{posts.filter((p) => p.status === 'approved').length}</Text>
+            <Text style={styles.statLabel}>Posty</Text>
+          </View>
+        </View>
+      </SurfaceCard>
 
+      <View style={{ height: space.lg }} />
+      <Button label="Edytuj profil" variant="primary" size="sm" onPress={() => router.push('/edit-profile')} />
+
+      <View style={{ height: space.md }} />
       <View style={styles.filterRow}>
         <TouchableOpacity
           style={[styles.filterPill, postFilter === 'approved' && styles.filterPillActive]}
           onPress={() => setPostFilter('approved')}
         >
-          <Text style={[styles.filterText, postFilter === 'approved' && styles.filterTextActive]}>
-            Zatwierdzone
-          </Text>
+          <Text style={[styles.filterText, postFilter === 'approved' && styles.filterTextActive]}>Zatwierdzone</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterPill, postFilter === 'pending' && styles.filterPillActive]}
           onPress={() => setPostFilter('pending')}
         >
-          <Text style={[styles.filterText, postFilter === 'pending' && styles.filterTextActive]}>
-            Oczekujące
-          </Text>
+          <Text style={[styles.filterText, postFilter === 'pending' && styles.filterTextActive]}>Oczekujące</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterPill, postFilter === 'rejected' && styles.filterPillActive]}
           onPress={() => setPostFilter('rejected')}
         >
-          <Text style={[styles.filterText, postFilter === 'rejected' && styles.filterTextActive]}>
-            Odrzucone
-          </Text>
+          <Text style={[styles.filterText, postFilter === 'rejected' && styles.filterTextActive]}>Odrzucone</Text>
         </TouchableOpacity>
       </View>
 
+      <View style={{ height: space.md }} />
       {isAdmin && (
-        <Button
-          label="Panel Admina (Moderacja)"
-          variant="secondary"
-          size="sm"
-          onPress={() => router.push('/admin/moderation')}
-          style={{ marginBottom: space.md }}
-        />
+        <Button label="Panel Admina (Moderacja)" variant="secondary" size="sm" onPress={() => router.push('/admin/moderation')} />
       )}
 
-      <Button label="Wyloguj" variant="destructive" size="sm" onPress={handleLogout} style={{ marginBottom: space.xl }} />
-
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{stats.followers}</Text>
-          <Text style={styles.statLabel}>Obserwujący</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{stats.following}</Text>
-          <Text style={styles.statLabel}>Obserwuje</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{posts.filter((p) => p.status === 'approved').length}</Text>
-          <Text style={styles.statLabel}>Posty</Text>
-        </View>
-      </View>
+      <View style={{ height: space.md }} />
+      <Button label="Wyloguj" variant="destructive" size="sm" onPress={handleLogout} />
     </View>
   );
 
@@ -372,9 +374,34 @@ const styles = StyleSheet.create({
   profileHeader: {
     padding: space['2xl'],
     alignItems: 'center',
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
-    marginBottom: 5,
+    paddingTop: space['3xl'],
+    paddingBottom: space['2xl'],
+  },
+  heroBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 220,
+    backgroundColor: colors.bg,
+  },
+  heroBlobA: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: colors.accentSoft,
+    left: -90,
+    top: -80,
+  },
+  heroBlobB: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(31, 61, 43, 0.08)',
+    right: -70,
+    top: -40,
   },
   name: {
     ...typography.titleXL,
@@ -392,22 +419,24 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surface,
     borderRadius: radius.pill,
-    padding: 3,
-    marginBottom: space.lg,
+    padding: 4,
+    marginTop: space.xs,
     borderWidth: hairline,
     borderColor: colors.border,
+    ...shadow.card,
   },
   filterPill: {
     paddingHorizontal: space.lg,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: radius.pill,
   },
   filterPillActive: {
     backgroundColor: colors.surfaceElevated,
     borderWidth: hairline,
     borderColor: colors.border,
+    ...shadow.card,
   },
   filterText: {
     fontSize: 13,
@@ -417,14 +446,23 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: colors.primary,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  statsCard: {
     width: '100%',
-    paddingHorizontal: space['2xl'],
+    maxWidth: 520,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.lg,
+    marginTop: space.lg,
   },
+  statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statItem: {
     alignItems: 'center',
+    flex: 1,
+  },
+  statDivider: {
+    width: hairline,
+    height: 26,
+    backgroundColor: colors.border,
+    opacity: 0.9,
   },
   statValue: {
     ...typography.titleLG,

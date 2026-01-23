@@ -365,7 +365,7 @@ export default function FeedScreen() {
           disabled={!item.authorId}
         >
           <Avatar size={40} uri={item.authorAvatarUrl} />
-          <View>
+          <View style={{ marginLeft: space.md }}>
             <Text style={styles.username}>{item.authorName || 'Użytkownik'}</Text>
             <Text style={styles.time}>
               {formatTimestampDate(item.createdAt, 'Teraz')}
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   topBar: {
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surfaceElevated,
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.md,
@@ -686,6 +686,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     alignItems: 'center',
     position: 'relative',
+    ...shadow.card,
   },
   appTitle: {
     ...typography.titleXL,
@@ -694,11 +695,11 @@ const styles = StyleSheet.create({
   },
   toggleContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.accentSoft,
+    backgroundColor: 'rgba(31, 61, 43, 0.08)',
     borderRadius: radius.pill,
-    padding: 3,
+    padding: 4,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.08)',
   },
   notificationsButton: {
     position: 'absolute',
@@ -707,11 +708,12 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceElevated,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.10)',
     justifyContent: 'center',
     alignItems: 'center',
+    ...shadow.card,
   },
   notificationsBadge: {
     position: 'absolute',
@@ -738,7 +740,7 @@ const styles = StyleSheet.create({
   toggleButtonActive: {
     backgroundColor: colors.surfaceElevated,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.10)',
     ...shadow.card,
   },
   toggleText: {
@@ -759,7 +761,7 @@ const styles = StyleSheet.create({
   },
   postContainer: {
     marginBottom: space.lg,
-    padding: space.lg,
+    padding: 18,
   },
   header: {
     flexDirection: 'row',
@@ -915,10 +917,10 @@ const styles = StyleSheet.create({
   commentRow: {
     marginBottom: 10,
     padding: 10,
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(15, 23, 20, 0.03)',
     borderRadius: radius.md,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.08)',
   },
   commentHeaderRow: {
     flexDirection: 'row',
@@ -950,14 +952,14 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.pill,
     paddingHorizontal: space.lg,
     paddingVertical: 10,
     marginRight: space.md,
     maxHeight: 100,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.10)',
   },
   commentSendButton: {
     width: 36,

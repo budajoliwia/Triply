@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { View, TextInput, Text, StyleSheet, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../src/firebase/client';
 import { Button } from '../src/components/Button';
 import { SurfaceCard } from '../src/components/SurfaceCard';
-import { colors, hairline, radius, space, typography } from '../src/theme';
+import { TextField } from '../src/components/TextField';
+import { colors, space, typography } from '../src/theme';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -35,30 +37,35 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container} keyboardVerticalOffset={0}>
         <View style={styles.header}>
+          <View style={styles.brandMark}>
+            <View style={styles.brandMarkInner}>
+              <Ionicons name="leaf" size={18} color={colors.primary} />
+            </View>
+          </View>
           <Text style={styles.title}>Triply</Text>
           <Text style={styles.subtitle}>Zaloguj się, aby kontynuować</Text>
         </View>
 
         <SurfaceCard style={styles.card}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
+          <TextField
+            label="Email"
             placeholder="np. jan@triply.com"
-            placeholderTextColor={colors.textTertiary}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
+            left={<Ionicons name="mail-outline" size={18} color={colors.textSecondary} />}
           />
 
-          <Text style={[styles.label, { marginTop: space.md }]}>Hasło</Text>
-          <TextInput
-            style={styles.input}
+          <View style={{ height: space.lg }} />
+          <TextField
+            label="Hasło"
             placeholder="Twoje hasło"
-            placeholderTextColor={colors.textTertiary}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            left={<Ionicons name="lock-closed-outline" size={18} color={colors.textSecondary} />}
           />
 
           <Button label="Zaloguj" onPress={handleLogin} loading={loading} disabled={loading} style={{ marginTop: space.xl }} />
@@ -77,20 +84,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: 11,
-    ...typography.body,
-  },
   header: {
     paddingHorizontal: space['2xl'],
-    paddingTop: space['3xl'],
-    paddingBottom: space.xl,
+    paddingTop: space['4xl'],
+    paddingBottom: space['2xl'],
     alignItems: 'center',
+  },
+  brandMark: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 20, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.md,
+  },
+  brandMarkInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 20, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     ...typography.titleXL,
@@ -105,11 +124,6 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: space.lg,
     padding: space['2xl'],
-  },
-  label: {
-    ...typography.meta,
-    color: colors.textSecondary,
-    marginBottom: space.sm,
   },
   link: {
     marginTop: space.lg,

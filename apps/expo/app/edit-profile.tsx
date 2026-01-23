@@ -13,7 +13,7 @@ import { Stack, router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '@firebase/firestore/dist/index.cjs.js';
 import type { UserDoc } from '@triply/shared/src/models';
 import { useAuth } from '../src/context/auth';
 import { db } from '../src/firebase/client';

@@ -10,7 +10,7 @@ import {
   writeBatch,
   type Timestamp,
   type Unsubscribe,
-} from 'firebase/firestore';
+} from '@firebase/firestore/dist/index.cjs.js';
 import { db } from '../firebase/client';
 
 export type AdminNotificationType = 'post_needs_review';

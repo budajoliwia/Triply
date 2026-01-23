@@ -1,10 +1,19 @@
 // Firebase client SDK init (Expo + web)
-import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import type { Auth } from 'firebase/auth';
+import type { Firestore } from 'firebase/firestore';
+import type { FirebaseStorage } from 'firebase/storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+
+// IMPORTANT (Expo / Metro):
+// Use `require(...)` for Firebase runtime imports to keep `@firebase/app` and
+// `@firebase/auth` on the same module instance (avoids
+// "Component auth has not been registered yet" crashes).
+const firebaseApp = require('@firebase/app') as typeof import('@firebase/app');
+const firebaseAuth = require('firebase/auth') as typeof import('firebase/auth');
+// Force Firestore CJS build (RN ESM build can cause service registration mismatch in Metro).
+const firebaseFirestore = require('@firebase/firestore/dist/index.cjs.js') as typeof import('@firebase/firestore/dist/index.cjs.js');
+const firebaseStorage = require('firebase/storage') as typeof import('firebase/storage');
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -18,11 +27,15 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const app = firebaseApp.getApps().length ? firebaseApp.getApp() : firebaseApp.initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+// NOTE:
+// For Expo Go / React Native, `getAuth(app)` is the most reliable initialization.
+// (`initializeAuth` + persistence can be re-introduced later if needed, but it has caused
+// "Component auth has not been registered yet" crashes in some setups.)
+export const auth: Auth = firebaseAuth.getAuth(app);
+export const db: Firestore = firebaseFirestore.getFirestore(app);
+export const storage: FirebaseStorage = firebaseStorage.getStorage(app);
 
 // Toggle this to switch between production and emulators
 const USE_EMULATORS = true;
@@ -35,10 +48,13 @@ function getEmulatorHost() {
 
   // Expo Go (Physical Device)
   // Try to get the IP address of the machine running the packager
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri) {
-    return hostUri.split(':')[0];
-  }
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    // older / alternative field names depending on Expo env
+    (Constants as any)?.expoGoConfig?.debuggerHost ||
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost ||
+    (Constants as any)?.manifest?.debuggerHost;
+  if (typeof hostUri === 'string' && hostUri) return hostUri.split(':')[0];
 
   return 'localhost';
 }
@@ -50,9 +66,9 @@ export function setupEmulators() {
 
     try {
       // Auth Emulator usually runs on http
-      connectAuthEmulator(auth, `http://${host}:9099`);
-      connectFirestoreEmulator(db, host, 8080);
-      connectStorageEmulator(storage, host, 9199);
+      firebaseAuth.connectAuthEmulator(auth, `http://${host}:9099`);
+      firebaseFirestore.connectFirestoreEmulator(db, host, 8080);
+      firebaseStorage.connectStorageEmulator(storage, host, 9199);
       console.log('Connected to Firebase Emulators');
     } catch (e) {
       const error = e as { code?: string; message?: string };

@@ -19,7 +19,7 @@ import {
   runTransaction,
   documentId,
   writeBatch,
-} from 'firebase/firestore';
+} from '@firebase/firestore/dist/index.cjs.js';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/client';
 import type { PostDoc, PostStatus } from '@triply/shared/src/models';

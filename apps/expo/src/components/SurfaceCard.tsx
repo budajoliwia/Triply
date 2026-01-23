@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.lg,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: 'rgba(15, 23, 20, 0.08)',
     ...shadow.card,
   },
 });

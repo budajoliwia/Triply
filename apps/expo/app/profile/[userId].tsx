@@ -20,7 +20,7 @@ import {
   unfollowUser,
 } from '../../src/services/users';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '@firebase/firestore/dist/index.cjs.js';
 import { db } from '../../src/firebase/client';
 import { Avatar } from '../../src/components/Avatar';
 import { getDownloadUrlCached } from '../../src/firebase/storage';
@@ -29,7 +29,8 @@ import { SkeletonBlock } from '../../src/components/Skeleton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { ErrorState } from '../../src/components/ErrorState';
 import { Button } from '../../src/components/Button';
-import { colors, hairline, radius, space, typography } from '../../src/theme';
+import { SurfaceCard } from '../../src/components/SurfaceCard';
+import { colors, hairline, radius, shadow, space, typography } from '../../src/theme';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -172,26 +173,35 @@ export default function PublicProfileScreen() {
 
     return (
       <View style={styles.header}>
-        <Avatar size={100} uri={avatarUrl} />
+        <View pointerEvents="none" style={styles.heroBg}>
+          <View style={styles.heroBlobA} />
+          <View style={styles.heroBlobB} />
+        </View>
+
+        <Avatar size={104} uri={avatarUrl} />
         <Text style={styles.name}>{profile.username ? `@${profile.username}` : 'Użytkownik'}</Text>
         <Text style={[styles.bio, !profile.bio && styles.bioPlaceholder]} numberOfLines={3}>
           {profile.bio ? profile.bio : 'Brak opisu'}
         </Text>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{profile.followersCount || 0}</Text>
-            <Text style={styles.statLabel}>Obserwujący</Text>
+        <SurfaceCard style={styles.statsCard}>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{profile.followersCount || 0}</Text>
+              <Text style={styles.statLabel}>Obserwujący</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{profile.followingCount || 0}</Text>
+              <Text style={styles.statLabel}>Obserwuje</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{posts.filter((p) => p.status === 'approved').length}</Text>
+              <Text style={styles.statLabel}>Posty</Text>
+            </View>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{profile.followingCount || 0}</Text>
-            <Text style={styles.statLabel}>Obserwuje</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{posts.filter((p) => p.status === 'approved').length}</Text>
-            <Text style={styles.statLabel}>Posty</Text>
-          </View>
-        </View>
+        </SurfaceCard>
 
         {user && user.uid !== userId && (
           <Button
@@ -200,7 +210,7 @@ export default function PublicProfileScreen() {
             loading={actionLoading}
             disabled={actionLoading}
             variant={following ? 'secondary' : 'primary'}
-            style={{ minWidth: 140 }}
+            style={{ minWidth: 160, marginTop: space.lg }}
           />
         )}
       </View>
@@ -299,8 +309,34 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     padding: space['2xl'],
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
+    paddingTop: space['3xl'],
+    paddingBottom: space['2xl'],
+  },
+  heroBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 220,
+    backgroundColor: colors.bg,
+  },
+  heroBlobA: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: colors.accentSoft,
+    left: -90,
+    top: -80,
+  },
+  heroBlobB: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(31, 61, 43, 0.08)',
+    right: -70,
+    top: -40,
   },
   name: {
     ...typography.titleXL,
@@ -315,14 +351,24 @@ const styles = StyleSheet.create({
   bioPlaceholder: {
     color: colors.textTertiary,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  statsCard: {
     width: '100%',
-    marginBottom: space.xl,
+    maxWidth: 520,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.lg,
+    marginBottom: space.lg,
+    ...shadow.card,
   },
+  statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statItem: {
     alignItems: 'center',
+    flex: 1,
+  },
+  statDivider: {
+    width: hairline,
+    height: 26,
+    backgroundColor: colors.border,
+    opacity: 0.9,
   },
   statValue: {
     ...typography.titleLG,

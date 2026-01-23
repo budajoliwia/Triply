@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from '@firebase/firestore/dist/index.cjs.js';
 import { auth, db } from '../firebase/client';
 import { UserDoc } from '@triply/shared/src/models';
 

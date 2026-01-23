@@ -2,6 +2,7 @@
   "expo": {
     "name": "Triply",
     "slug": "triply",
+    "scheme": "triply",
     "plugins": ["expo-router"]
   }
 }
