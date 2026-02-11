@@ -1,23 +1,62 @@
-## Triply (skeleton)
+# Triply
 
-This repo is an **empty skeleton** for an MVP social app (Expo mobile+web) + Firebase (Firestore/Storage/Functions).
+Aplikacja społecznościowa umożliwiająca publikowanie postów ze zdjęciami, obserwowanie innych użytkowników, komentowanie i reagowanie na treści. Posty przechodzą przez automatyczną moderację AI (GPT-4 Vision), a administrator ma dostęp do panelu ręcznej weryfikacji flagowanych treści.
 
-### Structure
+## Funkcjonalności
 
-- `apps/expo/` — Expo Router app (screens/files exist but are intentionally empty)
-- `firebase/` — Firestore/Storage rules + indexes
-- `functions/` — Cloud Functions (TypeScript) skeleton
-- `packages/shared/` — shared TypeScript types/constants skeleton
+- Tworzenie postów ze zdjęciami (kompresja po stronie klienta)
+- Feed z paginacją — wszystkie posty lub tylko od obserwowanych
+- Komentarze i polubienia z aktualizacją w czasie rzeczywistym
+- System obserwowania użytkowników
+- Wyszukiwanie użytkowników i profile
+- Powiadomienia w aplikacji
+- Automatyczna moderacja treści (tekst + obraz) przez OpenAI GPT-4 Vision
+- Panel admina z workflow zatwierdzania/odrzucania postów
+- Kontrola dostępu na podstawie ról (użytkownik / admin)
+- Stany ładowania, błędów i pustych widoków w całym UI
 
-### Next steps (when you start coding)
+## Stack technologiczny
 
-- Install deps in your chosen package manager (root workspaces).
-- Add Firebase client init in `apps/expo/src/firebase/client.ts`.
-- Add moderation + limit logic in `functions/src/triggers/onPostStatusChange.ts`.
+**Frontend:** Expo SDK 54, React Native, React 19, Expo Router, TypeScript
 
-### Firestore indexes
+**Backend:** Firebase Authentication, Cloud Firestore, Cloud Storage, Cloud Functions (Node.js 20)
 
-This repo uses `firebase/firestore.indexes.json` (configured in `firebase.json`).
+**AI:** OpenAI API (GPT-4 Vision) — automatyczna moderacja treści
 
-- Deploy indexes (only):
-  - `firebase deploy --only firestore:indexes`
+**Tooling:** npm workspaces (monorepo), ESLint, Prettier, Firebase Emulators
+
+## Struktura projektu
+
+```
+apps/expo/        Aplikacja Expo Router — ekrany, komponenty, klient Firebase
+functions/        Cloud Functions — triggery, serwisy, logika moderacji AI
+packages/shared/  Współdzielone typy TypeScript i stałe
+firebase/         Reguły bezpieczeństwa Firestore i Storage, indeksy
+```
+
+## Uruchomienie lokalne
+
+1. Instalacja zależności:
+   ```
+   npm install
+   ```
+
+2. Konfiguracja zmiennych środowiskowych — wymagane klucze opisane w `docs/env.example`.
+
+3. Uruchomienie emulatorów Firebase:
+   ```
+   npm run emulators
+   ```
+
+4. Uruchomienie aplikacji Expo:
+   ```
+   npm run expo
+   ```
+
+## Indeksy Firestore
+
+Indeksy kompozytowe zdefiniowane w `firebase/firestore.indexes.json`. Deploy:
+
+```
+firebase deploy --only firestore:indexes
+```
